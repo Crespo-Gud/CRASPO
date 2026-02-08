@@ -3,12 +3,12 @@ const { Client, GatewayIntentBits, Events } = require("discord.js");
 const fetch = require("node-fetch");
 const http = require("http");
 
-// --- Servidor HTTP para manter o Koyeb vivo ---
+// --- Servidor HTTP para manter o Railway vivo ---
 http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "text/plain" });
     res.end("OK");
-}).listen(8000, () => {
-    console.log("Servidor HTTP ativo na porta 8000");
+}).listen(process.env.PORT || 8000, () => {
+    console.log("Servidor HTTP ativo");
 });
 
 // --- Bot Discord ---
