@@ -6,8 +6,11 @@
     "start": "node index.js"
   },
   "dependencies": {
+    "@discordjs/voice": "^0.19.0",
     "discord.js": "^14.0.0",
     "dotenv": "^17.2.4",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "yt-search": "^2.13.1",
+    "ytdl-core": "^4.11.5"
   }
 }
