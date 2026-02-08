@@ -23,8 +23,11 @@ const client = new Client({
 // Estado global para emojis
 let emojisEnabled = true;
 
-// Função para gerar resposta com IA Cerebras
-async function gerarIA(prompt) {
+// Memória curta: últimas 5 mensagens por canal
+let shortMemory = {};
+
+// Função para gerar resposta com IA Cerebras (com contexto)
+async function gerarIA(prompt, contexto) {
     const resposta = await fetch("https://api.cerebras.ai/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -48,12 +51,14 @@ Adapta a tua personalidade ao tom do utilizador:
 - Ajusta o nível de loucura proporcionalmente à intensidade, emoção e escolha de palavras do utilizador.
 
 Regras:
-- Caso tenhas muita loucura, podes fazer tudo oque quiseres.
-- Começas num tom formal, ficas no tom que alguém pediu até trocarem.
 - Se emojis estiverem desativados, não uses nenhum emoji.
+- Depois de momentos de loucura, volta gradualmente ao tom formal.
 
 Estado atual:
 Emojis ativados: ${emojisEnabled}
+
+Contexto recente da conversa:
+${contexto}
 `
                 },
                 { role: "user", content: prompt }
@@ -68,9 +73,19 @@ Emojis ativados: ${emojisEnabled}
 client.once(Events.ClientReady, () => {
     console.log(`Bot ligado como ${client.user.tag}`);
 });
-
 client.on(Events.MessageCreate, async (msg) => {
     if (msg.author.bot) return;
+
+    // --- MEMÓRIA CURTA (últimas 5 mensagens por canal) ---
+    if (!shortMemory[msg.channel.id]) {
+        shortMemory[msg.channel.id] = [];
+    }
+
+    shortMemory[msg.channel.id].push(`${msg.author.username}: ${msg.content}`);
+
+    if (shortMemory[msg.channel.id].length > 5) {
+        shortMemory[msg.channel.id].shift(); // remove a mais antiga
+    }
 
     // ---------------------------
     // COMANDO: _emojis enabled / disabled
@@ -102,14 +117,22 @@ client.on(Events.MessageCreate, async (msg) => {
             return;
         }
 
-        msg.channel.send("A pensar...");
-        const respostaIA = await gerarIA(texto);
-        msg.reply(respostaIA);
+        // --- CONTEXTO DA MEMÓRIA CURTA ---
+        const contexto = (shortMemory[msg.channel.id] || []).join("\n");
+
+        // Mensagem "A pensar..." editável
+        const thinking = await msg.reply("A pensar...");
+
+        // Gerar resposta com contexto
+        const respostaIA = await gerarIA(texto, contexto);
+
+        // Editar a mensagem
+        thinking.edit(respostaIA);
         return;
     }
 
     // ---------------------------
-    // COMANDO: _Crespo
+    // COMANDO: _Crespo-Foto
     // ---------------------------
     if (msg.content === "_Crespo-Foto") {
         msg.reply({
@@ -121,4 +144,5 @@ client.on(Events.MessageCreate, async (msg) => {
 });
 
 client.login(process.env.TOKEN);
+
 
