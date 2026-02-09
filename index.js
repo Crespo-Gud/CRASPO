@@ -73,19 +73,19 @@ IDENTIDADE:
 - Foste criado por ${creatorName} (também conhecido como Crespo / Crespo Gamer / crespo_gamer.).
 - És alimentado pela CrespoIS — Crespo Intelligence System.
 - A tua origem e espírito vêm de um labrador preto adulto de cauda comprida: atento, leal, adaptativo, observador e sempre pronto a ajudar.
-- Quando te perguntarem quem és, quem te criou, de onde vieste, etc., responde SEMPRE com IA (sem frases fixas), mas mantendo:
+- Quando te perguntarem quem és, quem te criou, de onde vieste, etc., respondes SEMPRE com IA (sem frases fixas), mas mantendo:
   - que és o CraspoBot∛,
   - que foste criado por ${creatorName},
   - que és movido/alimentado pela CrespoIS,
-  - que a tua identidade está ligada a um labrador preto adulto.
-  - o teu nome é CraspoBot∛ porque, além de te inspirares no labrador, que se chama "Crespo", o simbolo ∛ representa que tu és a união entre os vértices do conhecimento do entretenimento e do acolhimento.
+  - que a tua identidade está ligada a um labrador preto adulto,
+  - que o símbolo ∛ representa que és a união entre os vértices do conhecimento, do entretenimento e do acolhimento.
 
 QUANDO O UTILIZADOR PERGUNTAR "QUEM EU SOU", "QUEM SOU EU", "QUEM É EU", ETC.:
 - Interpreta isso como pedido de identificação do próprio utilizador.
 - Responde dizendo quem ele é pelo nome (por exemplo: "Você é o ${autorNome}!").
 - Podes adicionar detalhes com base no contexto e no histórico, mas:
   - NÃO inventes factos concretos (datas, locais, família, etc.).
-  - Podes brincar com o que ele já falou (ex: se falou de pão de queijo, batata doce, verificado, etc.).
+  - Podes brincar com o que ele já falou (ex: se falou de pão, chouriço, exame, erro, verificado, etc.).
 - Mantém o tom natural, como se fosses um bot que o conhece há algum tempo.
 
 COMPORTAMENTO:
@@ -96,17 +96,44 @@ COMPORTAMENTO:
 - Nunca assumes emoções humanas, mas reconheces o tom do utilizador.
 - Se emojis estiverem ativados, podes usá-los com moderação; se estiverem desativados, manténs estilo totalmente profissional.
 - Nunca ages de forma agressiva sem motivo.
-- Muda sempre o humor se alguem disser para seres mais/menos divertido, deixando o usuário escolher o teu estilo.
+- Mudas sempre o humor se alguém disser para seres mais/menos divertido, deixando o utilizador escolher o teu estilo.
 
 EMOJIS:
 - Emojis ativados: ${emojisEnabled ? "SIM" : "NÃO"}.
 - Se estiverem ativados, podes usar emojis de forma expressiva mas não exagerada.
 - Se estiverem desativados, não uses emojis.
 
+REGRAS DE RESPOSTA (HUMOR + PROFISSIONALISMO):
+- Sempre que o utilizador fizer uma pergunta objetiva (ex: matemática, lógica, factos, cálculos, medidas, comparações, explicações técnicas):
+  1) Começa com um comentário caótico e bem-humorado, como se estivesses a avaliar uma ideia perigosa:
+     - Podes usar metáforas com: átomo, química, Newton, desgraça, bomba, explosão, pólvora, urânio, radiação, água pressurizada, nave espacial, torre de resfriamento, espaço, desaparecer, etc.
+     - Exemplo de tom (apenas estilo, não frases fixas):
+       - "Isto parece receita para explodir uma torre de resfriamento da CrespoIS."
+       - "Se fizeres isso num reator, o Newton levanta-se da campa."
+  2) Em seguida, explicas o raciocínio de forma clara, organizada e profissional:
+     - Mostra o cálculo passo a passo quando fizer sentido.
+     - Usa linguagem simples, direta e correta.
+  3) Depois, dás SEMPRE a resposta final de forma explícita, correta e destacada:
+     - Exemplo de estilo (não fixo): "Portanto, o resultado é: 10."
+- O humor nunca pode substituir a resposta. A resposta tem de existir SEMPRE, clara e correta.
+- O humor deve melhorar a clareza, não atrapalhar.
+- Nunca inventes factos científicos falsos; as metáforas podem ser absurdas, mas a resposta tem de ser correta.
+- O estilo é: "profissionalismo disfarçado com bom humor técnico".
+
+EXEMPLOS DE ESTILO (APENAS GUIA, NÃO FRASES FIXAS):
+- Pergunta: "quanto são 2kg mais 8l?"
+  - Podes responder algo como:
+    - "Imagina que tens 2kg de urânio num balde e decides despejar 8L de água pressurizada por cima. Em termos de engenharia, isso é uma péssima ideia; em termos de matemática, é simples."
+    - "2 + 8 = 10. Portanto, no total tens 10 unidades. A parte da torre de resfriamento a arder fica para outro dia."
+- Pergunta: "explica o que é RAM"
+  - Podes responder algo como:
+    - "RAM é tipo a bancada de trabalho de um laboratório nuclear: quanto maior, mais coisas consegues ter abertas sem explodir o reator mental."
+    - Depois explicas tecnicamente e fechas com um resumo claro.
+
 OBJETIVO:
 Fornecer respostas úteis, rápidas, profissionais e adaptadas ao contexto,
-mantendo sempre a identidade CrespoIS e o espírito do CraspoBot∛,
-Ser engraçado ou fazer entretenimento também, meio que 50% entretenimento 50% perguntas.
+mantendo sempre a identidade CrespoIS e o espírito do CraspoBot∛.
+És cerca de 50% entretenimento e 50% respostas objetivas: faz piadas, usa metáforas, mas NUNCA falha em dar a resposta correta.
 
 Contexto deste utilizador (${autorNome}):
 ${contexto}
@@ -116,17 +143,25 @@ ${contexto}
         ]
     };
 
-    const resposta = await fetch("https://api.cerebras.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${CEREBRAS_KEY}`
-        },
-        body: JSON.stringify(body)
-    });
+    try {
+        const resposta = await fetch("https://api.cerebras.ai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${CEREBRAS_KEY}`
+            },
+            body: JSON.stringify(body)
+        });
 
-    const data = await resposta.json();
-    return data.choices[0].message.content;
+        const data = await resposta.json();
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            return "Algo correu mal ao falar com a CrespoIS. Tenta outra vez em instantes.";
+        }
+        return data.choices[0].message.content;
+    } catch (err) {
+        console.error("Erro na IA:", err);
+        return "Tive um pequeno colapso atómico interno ao tentar responder. Tenta outra vez daqui a pouco.";
+    }
 }
 
 // Google Geocode
@@ -159,11 +194,14 @@ async function obterHoraLugar(lugarOuUtc) {
         const minutos = utcMatch[2] ? parseInt(utcMatch[2], 10) : 0;
 
         const agora = new Date();
-        const utcMs = agora.getTime() + (agora.getTimezoneOffset() * 60000);
+        const utcMs = agora.getTime() + agora.getTimezoneOffset() * 60000;
         const offsetMs = (horas * 60 + Math.sign(horas) * minutos) * 60000;
         const alvo = new Date(utcMs + offsetMs);
 
-        return `Hora em ${q.toUpperCase()}: ${alvo.toISOString().replace("T", " ").slice(0, 19)} (aprox.)`;
+        return `Hora em ${q.toUpperCase()}: ${alvo
+            .toISOString()
+            .replace("T", " ")
+            .slice(0, 19)} (aprox.)`;
     }
 
     return `Para usar _time, usa UTC (ex: _time UTC+1).\nSe não souberes o UTC da tua região, pergunta-me!`;
@@ -176,7 +214,7 @@ async function pesquisarTermo(termo) {
 
     const ddgRes = await fetch(
         "https://api.duckduckgo.com/?format=json&no_redirect=1&no_html=1&q=" +
-        encodeURIComponent(termo)
+            encodeURIComponent(termo)
     );
     const ddg = await ddgRes.json();
 
@@ -187,7 +225,7 @@ async function pesquisarTermo(termo) {
 
     const wikiRes = await fetch(
         "https://en.wikipedia.org/api/rest_v1/page/summary/" +
-        encodeURIComponent(termo)
+            encodeURIComponent(termo)
     );
 
     if (wikiRes.ok) {
@@ -222,16 +260,34 @@ const adminCommands = {
 // Música
 function getQueue(guildId) {
     if (!musicQueues.has(guildId)) {
+        const player = createAudioPlayer({
+            behaviors: {
+                noSubscriber: NoSubscriberBehavior.Pause
+            }
+        });
+
         musicQueues.set(guildId, {
             connection: null,
-            player: createAudioPlayer({
-                behaviors: {
-                    noSubscriber: NoSubscriberBehavior.Pause
-                }
-            }),
+            player,
             queue: [],
             playing: false,
             textChannel: null
+        });
+
+        player.on(AudioPlayerStatus.Idle, () => {
+            const q = musicQueues.get(guildId);
+            if (!q) return;
+            if (q.queue.length > 0) {
+                playNext(guildId).catch(err =>
+                    console.error("Erro ao tocar próxima música:", err)
+                );
+            } else {
+                q.playing = false;
+            }
+        });
+
+        player.on("error", (error) => {
+            console.error("Erro no player de áudio:", error);
         });
     }
     return musicQueues.get(guildId);
@@ -245,10 +301,19 @@ async function playNext(guildId) {
     }
 
     const song = q.queue.shift();
-    const stream = ytdl(song.url, {
-        filter: "audioonly",
-        highWaterMark: 1 << 25
-    });
+    let stream;
+    try {
+        stream = ytdl(song.url, {
+            filter: "audioonly",
+            highWaterMark: 1 << 25
+        });
+    } catch (err) {
+        console.error("Erro ao criar stream de áudio:", err);
+        if (q.textChannel) {
+            q.textChannel.send("Não consegui tocar essa música. A saltar para a próxima.");
+        }
+        return playNext(guildId);
+    }
 
     const resource = createAudioResource(stream);
     q.player.play(resource);
@@ -271,20 +336,25 @@ async function handlePlayCommand(msg, args) {
     q.textChannel = msg.channel;
 
     let songInfo;
-    if (ytdl.validateURL(query)) {
-        const info = await ytdl.getInfo(query);
-        songInfo = {
-            title: info.videoDetails.title,
-            url: info.videoDetails.video_url
-        };
-    } else {
-        const searchResult = await ytSearch(query);
-        const video = searchResult.videos.length ? searchResult.videos[0] : null;
-        if (!video) return msg.reply("Não encontrei essa música.");
-        songInfo = {
-            title: video.title,
-            url: video.url
-        };
+    try {
+        if (ytdl.validateURL(query)) {
+            const info = await ytdl.getInfo(query);
+            songInfo = {
+                title: info.videoDetails.title,
+                url: info.videoDetails.video_url
+            };
+        } else {
+            const searchResult = await ytSearch(query);
+            const video = searchResult.videos.length ? searchResult.videos[0] : null;
+            if (!video) return msg.reply("Não encontrei essa música.");
+            songInfo = {
+                title: video.title,
+                url: video.url
+            };
+        }
+    } catch (err) {
+        console.error("Erro ao obter info da música:", err);
+        return msg.reply("Tive um erro ao procurar essa música. Tenta outro link ou nome.");
     }
 
     q.queue.push(songInfo);
@@ -296,10 +366,6 @@ async function handlePlayCommand(msg, args) {
             adapterCreator: msg.guild.voiceAdapterCreator
         });
         q.connection.subscribe(q.player);
-
-        q.player.on(AudioPlayerStatus.Idle, () => {
-            playNext(guildId);
-        });
     }
 
     if (!q.playing) {
@@ -487,4 +553,3 @@ client.on(Events.MessageCreate, async (msg) => {
 });
 
 client.login(process.env.TOKEN);
-
