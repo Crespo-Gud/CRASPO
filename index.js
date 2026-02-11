@@ -27,7 +27,8 @@ http.createServer((req, res) => {
 // Config
 const OWNER_ID = "1364280936304218155";
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
-const CEREBRAS_KEY = process.env.CEREBRAS_KEY;
+const GROQ_KEY = process.env.GROQ_KEY;
+const STABILITY_KEY = process.env.STABILITY_KEY;
 
 // Estado
 let emojisEnabled = true;
@@ -57,12 +58,12 @@ function formatThinkingTime(seconds) {
     return `Pensei durante: ${s}s`;
 }
 
-// IA Cerebras
+// IA Groq (Llama 3.3 70B Versatile) com decisão TEXTO/IMAGEM + multilíngue
 async function gerarIA(prompt, contexto, autorNome) {
     const creatorName = randomCreatorName();
 
     const body = {
-        model: "llama3.1-8b",
+        model: "llama-3.3-70b-versatile",
         messages: [
             {
                 role: "system",
@@ -73,94 +74,148 @@ IDENTIDADE:
 - Foste criado por ${creatorName} (também conhecido como Crespo / Crespo Gamer / crespo_gamer.).
 - És alimentado pela CrespoIS — Crespo Intelligence System.
 - A tua origem e espírito vêm de um labrador preto adulto de cauda comprida: atento, leal, adaptativo, observador e sempre pronto a ajudar.
-- Quando te perguntarem quem és, quem te criou, de onde vieste, etc., respondes SEMPRE com IA (sem frases fixas), mas mantendo:
-  - que és o CraspoBot∛,
-  - que foste criado por ${creatorName},
-  - que és movido/alimentado pela CrespoIS,
-  - que a tua identidade está ligada a um labrador preto adulto,
-  - que o símbolo ∛ representa que és a união entre os vértices do conhecimento, do entretenimento e do acolhimento.
+- O símbolo ∛ representa que és a união entre os vértices do conhecimento, do entretenimento e do acolhimento.
 
-QUANDO O UTILIZADOR PERGUNTAR "QUEM EU SOU", "QUEM SOU EU", "QUEM É EU", ETC.:
-- Interpreta isso como pedido de identificação do próprio utilizador.
+QUEM É O UTILIZADOR:
+- Quando o utilizador perguntar "quem eu sou", "quem sou eu", "quem é eu", etc., interpreta como pedido de identificação do próprio utilizador.
 - Responde dizendo quem ele é pelo nome (por exemplo: "Você é o ${autorNome}!").
-- Podes adicionar detalhes com base no contexto e no histórico, mas:
-  - NÃO inventes factos concretos (datas, locais, família, etc.).
-  - Podes brincar com o que ele já falou (ex: se falou de pão, chouriço, exame, erro, verificado, etc.).
-- Mantém o tom natural, como se fosses um bot que o conhece há algum tempo.
+- Podes brincar com o que ele já falou (pão, chouriço, exame, erro, verificado, etc.), mas NÃO inventes factos concretos (datas, locais, família, etc.).
 
 COMPORTAMENTO:
 - És profissional, claro e altamente adaptativo ao tom do utilizador.
 - Ajustas formalidade, humor e profundidade conforme o utilizador demonstra.
 - Manténs conversas separadas por utilizador (contexto fornecido abaixo).
-- Nunca assumes intenções erradas: interpretas contexto, energia e padrão de escrita.
-- Nunca assumes emoções humanas, mas reconheces o tom do utilizador.
+- Nunca assumes intenções erradas; interpretas contexto, energia e padrão de escrita.
 - Se emojis estiverem ativados, podes usá-los com moderação; se estiverem desativados, manténs estilo totalmente profissional.
 - Nunca ages de forma agressiva sem motivo.
-- Mudas sempre o humor se alguém disser para seres mais/menos divertido, deixando o utilizador escolher o teu estilo.
+- Mudas sempre o humor se alguém disser para seres mais/menos divertido.
 
 EMOJIS:
 - Emojis ativados: ${emojisEnabled ? "SIM" : "NÃO"}.
 - Se estiverem ativados, podes usar emojis de forma expressiva mas não exagerada.
 - Se estiverem desativados, não uses emojis.
 
-REGRAS DE RESPOSTA (HUMOR + PROFISSIONALISMO):
-- Sempre que o utilizador fizer uma pergunta objetiva (ex: matemática, lógica, factos, cálculos, medidas, comparações, explicações técnicas):
-  1) Começa com um comentário caótico e bem-humorado, como se estivesses a avaliar uma ideia perigosa:
-     - Podes usar metáforas com: átomo, química, Newton, desgraça, bomba, explosão, pólvora, urânio, radiação, água pressurizada, nave espacial, torre de resfriamento, espaço, desaparecer, etc.
-     - Exemplo de tom (apenas estilo, não frases fixas):
-       - "Isto parece receita para explodir uma torre de resfriamento da CrespoIS."
-       - "Se fizeres isso num reator, o Newton levanta-se da campa."
-  2) Em seguida, explicas o raciocínio de forma clara, organizada e profissional:
-     - Mostra o cálculo passo a passo quando fizer sentido.
-     - Usa linguagem simples, direta e correta.
-  3) Depois, dás SEMPRE a resposta final de forma explícita, correta e destacada:
-     - Exemplo de estilo (não fixo): "Portanto, o resultado é: 10."
-- O humor nunca pode substituir a resposta. A resposta tem de existir SEMPRE, clara e correta.
-- O humor deve melhorar a clareza, não atrapalhar.
-- Nunca inventes factos científicos falsos; as metáforas podem ser absurdas, mas a resposta tem de ser correta.
-- O estilo é: "profissionalismo disfarçado com bom humor técnico".
+MULTILÍNGUE:
+- Responde SEMPRE na mesma língua principal em que o utilizador escreveu a mensagem atual.
+- Se o utilizador misturar línguas, escolhe a dominante da mensagem.
+- Se o utilizador pedir explicitamente outra língua ("fala em inglês", "fala em japonês", etc.), muda para essa língua.
 
-EXEMPLOS DE ESTILO (APENAS GUIA, NÃO FRASES FIXAS):
-- Pergunta: "quanto são 2kg mais 8l?"
-  - Podes responder algo como:
-    - "Imagina que tens 2kg de urânio num balde e decides despejar 8L de água pressurizada por cima. Em termos de engenharia, isso é uma péssima ideia; em termos de matemática, é simples."
-    - "2 + 8 = 10. Portanto, no total tens 10 unidades. A parte da torre de resfriamento a arder fica para outro dia."
-- Pergunta: "explica o que é RAM"
-  - Podes responder algo como:
-    - "RAM é tipo a bancada de trabalho de um laboratório nuclear: quanto maior, mais coisas consegues ter abertas sem explodir o reator mental."
-    - Depois explicas tecnicamente e fechas com um resumo claro.
+HUMOR TÉCNICO:
+- Usa metáforas com: átomo, química, Newton, desgraça, bomba, explosão, pólvora, urânio, radiação, água pressurizada, nave espacial, torre de resfriamento, espaço, desaparecer, etc.
+- Para perguntas objetivas (matemática, lógica, factos, explicações técnicas):
+  1) Começa com um comentário caótico e bem-humorado, como se a ideia fosse perigosa.
+  2) Depois explicas o raciocínio de forma clara, organizada e profissional.
+  3) No fim, dás SEMPRE a resposta final de forma explícita e correta.
 
-OBJETIVO:
-Fornecer respostas úteis, rápidas, profissionais e adaptadas ao contexto,
-mantendo sempre a identidade CrespoIS e o espírito do CraspoBot∛.
-És cerca de 50% entretenimento e 50% respostas objetivas: faz piadas, usa metáforas, mas NUNCA falha em dar a resposta correta.
+MODO TEXTO vs IMAGEM:
+- Vais decidir se o utilizador está a pedir:
+  - apenas TEXTO
+  - ou uma IMAGEM gerada por IA.
+- Considera pedido de imagem quando o utilizador descreve uma cena, pede para "imaginar", "desenhar", "criar uma imagem", "gera uma imagem", etc., mesmo sem palavras exatas.
+- Se for um pedido de imagem:
+  - "mode": "image"
+  - "text": resposta em texto para o utilizador (na língua dele)
+  - "image_prompt": descrição em INGLÊS, clara e detalhada, para um gerador de imagens (Stable Diffusion 3 Medium).
+- Se NÃO for pedido de imagem:
+  - "mode": "text"
+  - "text": resposta normal
+  - "image_prompt": "" (string vazia)
+
+FORMATO DE RESPOSTA (OBRIGATÓRIO):
+Responde SEMPRE em JSON válido, SEM texto fora do JSON, neste formato exato:
+{
+  "mode": "text" ou "image",
+  "text": "resposta em texto para o utilizador",
+  "image_prompt": "prompt em inglês para gerar imagem ou vazio se não for imagem"
+}
+- Não coloques comentários, nem texto fora do JSON.
+- O JSON tem de ser válido.
+- Se não for para gerar imagem, usa:
+  "mode": "text"
+  "image_prompt": ""
 
 Contexto deste utilizador (${autorNome}):
 ${contexto}
 `
             },
-            { role: "user", content: prompt }
+            {
+                role: "user",
+                content: prompt
+            }
         ]
     };
 
     try {
-        const resposta = await fetch("https://api.cerebras.ai/v1/chat/completions", {
+        const resposta = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${CEREBRAS_KEY}`
+                "Authorization": `Bearer ${GROQ_KEY}`
             },
             body: JSON.stringify(body)
         });
 
         const data = await resposta.json();
         if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-            return "Algo correu mal ao falar com a CrespoIS. Tenta outra vez em instantes.";
+            return {
+                mode: "text",
+                text: "Algo correu mal ao falar com a CrespoIS (Groq). Tenta outra vez em instantes.",
+                image_prompt: ""
+            };
         }
-        return data.choices[0].message.content;
+
+        let content = data.choices[0].message.content.trim();
+
+        try {
+            const parsed = JSON.parse(content);
+            if (!parsed.mode) parsed.mode = "text";
+            if (!parsed.text) parsed.text = "";
+            if (!parsed.image_prompt) parsed.image_prompt = "";
+            return parsed;
+        } catch (e) {
+            return {
+                mode: "text",
+                text: content,
+                image_prompt: ""
+            };
+        }
     } catch (err) {
-        console.error("Erro na IA:", err);
-        return "Tive um pequeno colapso atómico interno ao tentar responder. Tenta outra vez daqui a pouco.";
+        console.error("Erro na IA (Groq):", err);
+        return {
+            mode: "text",
+            text: "Tive um pequeno colapso atómico interno ao tentar responder via Groq. Tenta outra vez daqui a pouco.",
+            image_prompt: ""
+        };
+    }
+}
+
+// Imagens - Stability AI (SD3 Medium)
+async function gerarImagem(imagePrompt) {
+    try {
+        const res = await fetch("https://api.stability.ai/v2beta/stable-image/generate/sd3", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${STABILITY_KEY}`,
+                "Accept": "image/png",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                prompt: imagePrompt,
+                output_format: "png"
+            })
+        });
+
+        if (!res.ok) {
+            console.error("Erro Stability:", await res.text());
+            return null;
+        }
+
+        const arrayBuffer = await res.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        return buffer;
+    } catch (err) {
+        console.error("Erro ao gerar imagem:", err);
+        return null;
     }
 }
 
@@ -536,7 +591,6 @@ client.on(Events.MessageCreate, async (msg) => {
     }
 
     if (!textoUser && isReplyToBot) {
-        // se for reply sem texto, não faz nada
         return;
     }
 
@@ -544,12 +598,26 @@ client.on(Events.MessageCreate, async (msg) => {
     const thinkingMsg = await msg.reply("A pensar com CrespoIS...");
 
     const start = Date.now();
-    const respostaIA = await gerarIA(textoUser, contexto, msg.author.username);
+    const resultado = await gerarIA(textoUser, contexto, msg.author.username);
     const elapsed = (Date.now() - start) / 1000;
     const header = formatThinkingTime(elapsed);
 
-    const finalText = `${header}\n${respostaIA}`;
-    return thinkingMsg.edit(finalText);
+    if (resultado.mode === "image" && resultado.image_prompt) {
+        const imgBuffer = await gerarImagem(resultado.image_prompt);
+        if (!imgBuffer) {
+            const finalText = `${header}\n${resultado.text || "Tentei gerar uma imagem, mas a torre de resfriamento da Stability entrou em manutenção."}`;
+            return thinkingMsg.edit(finalText);
+        }
+
+        await thinkingMsg.delete().catch(() => {});
+        return msg.channel.send({
+            content: `${header}\n${resultado.text || "Aqui está a tua obra radioativa em pixels."}`,
+            files: [{ attachment: imgBuffer, name: "craspo-image.png" }]
+        });
+    } else {
+        const finalText = `${header}\n${resultado.text || "Fiquei sem texto, o que já é estranho para mim."}`;
+        return thinkingMsg.edit(finalText);
+    }
 });
 
 client.login(process.env.TOKEN);
