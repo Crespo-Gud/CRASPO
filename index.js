@@ -1,4 +1,4 @@
-require("dotenv").config();
+erequire("dotenv").config();
 const {
     Client,
     GatewayIntentBits,
@@ -62,15 +62,11 @@ function extrairNomePrincipal(username) {
     ];
 
     // Função para limpar símbolos
-    function limpar(p) {
-        return p
-            .replace(/[_\-\/\\\|
-
-\[\]
-
-\(\)\{\}\.\,\!\?\*\+\=\~\^\$]/g, "")
-            .trim();
-    }
+function limpar(p) {
+    return p
+        .replace(/[^a-zA-ZÀ-ÿ]/g, "") // remove tudo que não for letra
+        .trim();
+}
 
     // 1) tenta achar algo que pareça nome humano
     for (let p of partes) {
