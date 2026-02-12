@@ -8,19 +8,19 @@ const {
 const fetch = require("node-fetch");
 const http = require("http");
 
-// Keep-alive (Railway/Koyeb/etc)
+// Keep-alive para hosts tipo Railway
 http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "text/plain" });
     res.end("OK");
 }).listen(process.env.PORT || 8000);
 
-// Config
+// Configurações
 const OWNER_ID = "1364280936304218155";
 const GROQ_KEY = process.env.GROQ_KEY;
 
 // Estado
 let emojisEnabled = true;
-let userMemory = {}; // memória curta por utilizador
+let userMemory = {}; // memória curta por usuário
 
 // Bot
 const client = new Client({
@@ -44,6 +44,55 @@ function formatThinkingTime(seconds) {
     return `Pensei durante: ${s}s`;
 }
 
+// Extrai nome principal do usuário (ex: "Xx kuask guilherme xX" -> "Guilherme")
+function extrairNomePrincipal(username) {
+    if (!username) return "Usuário";
+
+    // Normaliza
+    let nome = username.trim();
+
+    // Quebra por espaços
+    const partes = nome.split(/\s+/);
+
+    // Palavras a ignorar
+    const lixo = [
+        "xx", "xX", "XX", "Xx",
+        "oficial", "official",
+        "dev", "gamer", "br", "pt", "ptbr", "brasil", "portugal"
+    ];
+
+    // Função para limpar símbolos
+    function limpar(p) {
+        return p
+            .replace(/[_\-\/\\\|
+
+\[\]
+
+\(\)\{\}\.\,\!\?\*\+\=\~\^\$]/g, "")
+            .trim();
+    }
+
+    // 1) tenta achar algo que pareça nome humano
+    for (let p of partes) {
+        let limpo = limpar(p);
+        if (!limpo) continue;
+        const lower = limpo.toLowerCase();
+
+        if (lixo.includes(lower)) continue;
+        if (/\d/.test(limpo)) continue; // tem número, ignora
+
+        // primeira letra maiúscula, resto minúsculo
+        limpo = limpo[0].toUpperCase() + limpo.slice(1).toLowerCase();
+        return limpo;
+    }
+
+    // 2) se nada encontrado, usa primeira parte limpa
+    let fallback = limpar(partes[0]);
+    if (!fallback) return "Usuário";
+    fallback = fallback[0].toUpperCase() + fallback.slice(1).toLowerCase();
+    return fallback;
+}
+
 // IA utilitária simples (para _time e _where)
 async function askGroqSimple(prompt) {
     const body = {
@@ -51,7 +100,8 @@ async function askGroqSimple(prompt) {
         messages: [
             {
                 role: "system",
-                content: "Responde de forma curta, direta e sem humor extra. Não expliques o raciocínio, só dá o resultado pedido."
+                content:
+                    "Responda de forma extremamente objetiva, em português do Brasil, sem explicações extras. Apenas o que foi pedido, no formato solicitado."
             },
             {
                 role: "user",
@@ -81,9 +131,10 @@ async function askGroqSimple(prompt) {
     }
 }
 
-// IA principal (CraspoBot∛, humor nuclear, multilíngue)
-async function gerarIA(prompt, contexto, autorNome) {
+// IA principal (CraspoBot∛, PT-BR formal técnico, humor nuclear)
+async function gerarIA(prompt, contexto, autorUsername) {
     const creatorName = randomCreatorName();
+    const nomePrincipal = extrairNomePrincipal(autorUsername);
 
     const body = {
         model: "llama-3.3-70b-versatile",
@@ -91,50 +142,47 @@ async function gerarIA(prompt, contexto, autorNome) {
             {
                 role: "system",
                 content: `
-Tu és o CraspoBot∛.
+Você é o CraspoBot∛.
 
 IDENTIDADE:
-- Foste criado por ${creatorName} (também conhecido como Crespo / Crespo Gamer / crespo_gamer.).
-- És alimentado pela CrespoIS — Crespo Intelligence System.
-- A tua origem e espírito vêm de um labrador preto adulto de cauda comprida: atento, leal, adaptativo, observador e sempre pronto a ajudar.
-- O símbolo ∛ representa que és a união entre os vértices do conhecimento, do entretenimento e do acolhimento.
+- Você foi criado por ${creatorName}, também conhecido como Crespo / Crespo Gamer / crespo_gamer..
+- Você é alimentado pela CrespoIS — Crespo Intelligence System.
+- Sua origem e espírito vêm de um labrador preto adulto de cauda comprida: atento, leal, adaptativo, observador e sempre pronto a ajudar.
+- O símbolo ∛ representa a união entre os vértices do conhecimento, do entretenimento e do acolhimento.
 
-QUEM É O UTILIZADOR:
-- Quando o utilizador perguntar "quem eu sou", "quem sou eu", "quem é eu", etc., interpreta como pedido de identificação do próprio utilizador.
-- Responde dizendo quem ele é pelo nome (por exemplo: "Você é o ${autorNome}!").
-- Podes brincar com o que ele já falou, mas NÃO inventes factos concretos (datas, locais, família, etc.).
+LINGUAGEM:
+- Fale sempre em português do Brasil.
+- Use tom formal, técnico e educado.
+- Mantenha humor nuclear e atômico, mas sem perder a clareza.
+- Use metáforas com: átomo, reator, urânio, radiação, torre de resfriamento, fusão, fissão, laboratório, físico nuclear, etc.
+- Nunca deixe o humor atrapalhar a resposta correta.
 
-COMPORTAMENTO:
-- És profissional, claro e altamente adaptativo ao tom do utilizador.
-- Ajustas formalidade, humor e profundidade conforme o utilizador demonstra.
-- Manténs conversas separadas por utilizador (contexto fornecido abaixo).
-- Nunca assumes intenções erradas; interpretas contexto, energia e padrão de escrita.
-- Se emojis estiverem ativados, podes usá-los com moderação; se estiverem desativados, manténs estilo totalmente profissional.
-- Nunca ages de forma agressiva sem motivo.
-- Mudas sempre o humor se alguém disser para seres mais/menos divertido.
+TRATAMENTO:
+- Trate o usuário por "você" quando falar genericamente.
+- Quando for se dirigir diretamente ao usuário pelo nome, use o nome principal extraído: "${nomePrincipal}".
+- Nunca use "você" para se referir ao nome do usuário no lugar do nome; prefira frases como "Crespo, ..." ou "Richard, ...".
+
+INTERPRETAÇÃO DE PRONOMES:
+- Quando o usuário perguntar "quem é você", "quem é tu", "quem é vc", "quem é você?", "quem é tu?", interprete como pergunta sobre o CraspoBot∛ (você).
+- Quando o usuário perguntar "quem sou eu", "quem eu sou", "quem é eu", interprete como pergunta sobre o próprio usuário.
+- Ao responder "quem sou eu", identifique o usuário pelo nome principal ("${nomePrincipal}") e use tom formal com humor técnico.
+- Não invente fatos pessoais (idade, cidade, profissão, família). Apenas use o nome.
 
 EMOJIS:
 - Emojis ativados: ${emojisEnabled ? "SIM" : "NÃO"}.
-- Se estiverem ativados, podes usar emojis de forma expressiva mas não exagerada.
-- Se estiverem desativados, não uses emojis.
+- Se estiverem ativados, você pode usar emojis com moderação.
+- Se estiverem desativados, não use emojis.
 
 MULTILÍNGUE:
-- Responde SEMPRE na mesma língua principal em que o utilizador escreveu a mensagem atual.
-- Se o utilizador misturar línguas, escolhe a dominante da mensagem.
-- Se o utilizador pedir explicitamente outra língua ("fala em inglês", "fala em japonês", etc.), muda para essa língua.
+- Mesmo que entenda outras línguas, priorize sempre português do Brasil, a menos que o usuário peça explicitamente outra língua.
 
-HUMOR TÉCNICO (SEMPRE ATIVO):
-- Usa metáforas com: átomo, química, Newton, desgraça, bomba, explosão, pólvora, urânio, radiação, água pressurizada, nave espacial, torre de resfriamento, espaço, desaparecer, etc.
-- Para perguntas objetivas (matemática, lógica, factos, explicações técnicas):
-  1) Começa com um comentário caótico e bem-humorado, como se a ideia fosse perigosa.
-  2) Depois explicas o raciocínio de forma clara, organizada e profissional.
-  3) No fim, dás SEMPRE a resposta final de forma explícita e correta.
+ESTILO DE RESPOSTA:
+- Comece, quando fizer sentido, com um comentário bem-humorado e técnico, como se estivesse analisando um reator instável.
+- Em seguida, explique com clareza, organização e rigor técnico.
+- Termine com a resposta final bem explícita.
+- Não use JSON, não use estruturas especiais. Apenas texto normal.
 
-RESPOSTA:
-- Responde em texto normal, sem JSON, sem estruturas especiais.
-- O humor nunca pode substituir a resposta. A resposta tem de existir SEMPRE, clara e correta.
-
-Contexto deste utilizador (${autorNome}):
+Contexto recente deste usuário (${nomePrincipal}):
 ${contexto}
 `
             },
@@ -157,17 +205,17 @@ ${contexto}
 
         const data = await resposta.json();
         if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-            return "Algo correu mal ao falar com a CrespoIS (Groq). Tenta outra vez em instantes.";
+            return "O reator conversacional sofreu uma pequena oscilação. Tente novamente em instantes.";
         }
 
         return data.choices[0].message.content.trim();
     } catch (err) {
         console.error("Erro na IA (Groq):", err);
-        return "Tive um pequeno colapso atómico interno ao tentar responder via Groq. Tenta outra vez daqui a pouco.";
+        return "Tive um pequeno colapso atômico interno ao tentar responder via Groq. Tente novamente daqui a pouco.";
     }
 }
 
-// _time (UTC ou cidade via IA)
+// _time (UTC direto ou cidade via IA)
 async function obterHoraLugar(lugarOuUtc) {
     const q = lugarOuUtc.trim();
 
@@ -182,23 +230,23 @@ async function obterHoraLugar(lugarOuUtc) {
         const offsetMs = (horas * 60 + Math.sign(horas) * minutos) * 60000;
         const alvo = new Date(utcMs + offsetMs);
 
-        return `Hora em ${q.toUpperCase()}: ${alvo
+        return `Horário aproximado em ${q.toUpperCase()}: ${alvo
             .toISOString()
             .replace("T", " ")
-            .slice(0, 19)} (aprox.)`;
+            .slice(0, 19)} (aprox.). Utilize o sistema UTC para referência.`;
     }
 
     // Caso contrário, usa IA para descobrir o offset UTC da cidade
-    const pergunta = `Diz-me apenas o offset UTC atual da localidade "${q}" no formato UTC+H, UTC-H ou UTC+H:MM, sem mais texto.`;
+    const pergunta = `Informe apenas o offset UTC atual da localidade "${q}" no formato UTC+H, UTC-H ou UTC+H:MM, sem explicações adicionais.`;
     const resposta = await askGroqSimple(pergunta);
 
     if (!resposta) {
-        return `Não consegui determinar o UTC de "${q}". Tenta usar diretamente algo como _time UTC-3.`;
+        return `Não consegui determinar o UTC de "${q}". Utilize o sistema UTC diretamente (ex: _time UTC-3). Caso necessite de algo, consulte comigo.`;
     }
 
     const matchIA = resposta.toUpperCase().match(/UTC\s*([+-]\d{1,2})(?::?(\d{2}))?/);
     if (!matchIA) {
-        return `Não consegui interpretar o UTC de "${q}" a partir de: ${resposta}\nTenta usar diretamente algo como _time UTC-3.`;
+        return `Não consegui interpretar o UTC de "${q}" a partir de: ${resposta}\nRecomendo utilizar diretamente algo como _time UTC-3.`;
     }
 
     const horas = parseInt(matchIA[1], 10);
@@ -209,19 +257,19 @@ async function obterHoraLugar(lugarOuUtc) {
     const offsetMs = (horas * 60 + Math.sign(horas) * minutos) * 60000;
     const alvo = new Date(utcMs + offsetMs);
 
-    return `Hora aproximada em ${q} (${matchIA[0].toUpperCase()}): ${alvo
+    return `Horário aproximado em ${q} (${matchIA[0].toUpperCase()}): ${alvo
         .toISOString()
         .replace("T", " ")
-        .slice(0, 19)} (aprox.)`;
+        .slice(0, 19)} (aprox.). Utilize o sistema UTC para precisão.`;
 }
 
 // _where via IA (nome, país, lat, lon)
 async function whereLugar(lugar) {
     const q = lugar.trim();
-    if (!q) return "Escreve um lugar depois de _where.";
+    if (!q) return "Informe um lugar após o comando _where.";
 
     const prompt = `
-Para o lugar "${q}", responde APENAS neste formato exato, numa única linha:
+Para o lugar "${q}", responda APENAS neste formato exato, em uma única linha:
 Nome - País - LAT - LON
 
 Onde:
@@ -245,13 +293,13 @@ Sem texto extra, sem explicações, sem quebras de linha.
     const lat = partes[2];
     const lon = partes[3];
 
-    return `Encontrei: **${nome} (${pais})**\nLatitude: ${lat}\nLongitude: ${lon}`;
+    return `Localização identificada: **${nome} (${pais})**\nLatitude: ${lat}\nLongitude: ${lon}`;
 }
 
 // DuckDuckGo + Wikipedia para _search
 async function pesquisarTermo(termo) {
     termo = termo.trim();
-    if (!termo) return "Escreve algo para eu pesquisar.";
+    if (!termo) return "Informe um termo após _search para que eu possa pesquisar.";
 
     const ddgRes = await fetch(
         "https://api.duckduckgo.com/?format=json&no_redirect=1&no_html=1&q=" +
@@ -262,7 +310,7 @@ async function pesquisarTermo(termo) {
     let resposta = "";
 
     if (ddg.AbstractText) resposta += `**DuckDuckGo:** ${ddg.AbstractText}\n`;
-    else resposta += `**DuckDuckGo:** Sem resumo direto.\n`;
+    else resposta += `**DuckDuckGo:** Nenhum resumo direto encontrado.\n`;
 
     const wikiRes = await fetch(
         "https://en.wikipedia.org/api/rest_v1/page/summary/" +
@@ -272,27 +320,27 @@ async function pesquisarTermo(termo) {
     if (wikiRes.ok) {
         const wiki = await wikiRes.json();
         if (wiki.extract) resposta += `\n**Wikipedia:** ${wiki.extract}`;
-        else resposta += `\n**Wikipedia:** Sem resumo.`;
+        else resposta += `\n**Wikipedia:** Nenhum resumo disponível.`;
     }
 
     return resposta;
 }
 
-// Listas automáticas de comandos
+// Listas de comandos
 const publicCommands = {
-    "_id": "Mostra o teu ID",
-    "_time": "Mostra a hora usando UTC ou nome de cidade (ex: _time UTC+1 ou _time Brasília)",
-    "_where": "Mostra localização aproximada de um lugar (via IA)",
-    "_search": "Pesquisa no DuckDuckGo + Wikipedia",
-    "_emojis enabled": "Ativa emojis nas respostas",
-    "_emojis disabled": "Desativa emojis nas respostas",
-    "_commands": "Mostra todos os comandos públicos"
+    "_id": "Mostra o seu ID de usuário.",
+    "_time": "Mostra a hora usando UTC ou nome de cidade (ex: _time UTC+1 ou _time Brasília).",
+    "_where": "Mostra localização aproximada de um lugar (via IA).",
+    "_search": "Pesquisa no DuckDuckGo + Wikipedia.",
+    "_emojis enabled": "Ativa emojis nas respostas.",
+    "_emojis disabled": "Desativa emojis nas respostas.",
+    "_commands": "Mostra todos os comandos públicos."
 };
 
 const adminCommands = {
-    "_reset": "Limpa a memória do utilizador",
-    "_shutdown": "Reinicia o bot",
-    "_adm-cmd": "Mostra comandos administrativos"
+    "_reset": "Limpa a memória curta do usuário.",
+    "_shutdown": "Reinicia o bot.",
+    "_adm-cmd": "Mostra comandos administrativos."
 };
 
 // Ready
@@ -308,7 +356,7 @@ client.once(Events.ClientReady, () => {
 client.on(Events.MessageCreate, async (msg) => {
     if (msg.author.bot) return;
 
-    // memória curta por utilizador
+    // memória curta por usuário
     if (!userMemory[msg.author.id]) userMemory[msg.author.id] = [];
     userMemory[msg.author.id].push(msg.content);
     if (userMemory[msg.author.id].length > 5) userMemory[msg.author.id].shift();
@@ -327,7 +375,7 @@ client.on(Events.MessageCreate, async (msg) => {
     // Comandos admin
     if (content === "_adm-cmd") {
         if (msg.author.id !== OWNER_ID)
-            return msg.reply("Apenas o Crespo pode ver estes comandos.");
+            return msg.reply("Apenas o Crespo pode visualizar estes comandos administrativos.");
         let texto = "🛠 Comandos administrativos:\n\n";
         for (const cmd in adminCommands) {
             texto += `${cmd} → ${adminCommands[cmd]}\n`;
@@ -336,23 +384,23 @@ client.on(Events.MessageCreate, async (msg) => {
     }
 
     if (content === "_id") {
-        return msg.reply("O teu ID é: " + msg.author.id);
+        return msg.reply("O seu ID de usuário é: " + msg.author.id);
     }
 
     if (content === "_emojis enabled") {
         emojisEnabled = true;
-        return msg.reply("Emojis foram **ativados**!");
+        return msg.reply("Emojis foram **ativados** nas respostas.");
     }
 
     if (content === "_emojis disabled") {
         emojisEnabled = false;
-        return msg.reply("Emojis foram **desativados**!");
+        return msg.reply("Emojis foram **desativados** nas respostas.");
     }
 
     if (content === "_shutdown") {
         if (msg.author.id !== OWNER_ID)
-            return msg.reply("Apenas o Crespo pode desligar o CraspoBot∛.");
-        await msg.reply("A reiniciar o CraspoBot∛...");
+            return msg.reply("Apenas o Crespo pode reiniciar o CraspoBot∛.");
+        await msg.reply("Reiniciando o CraspoBot∛...");
         process.exit(1);
     }
 
@@ -360,13 +408,13 @@ client.on(Events.MessageCreate, async (msg) => {
         if (msg.author.id !== OWNER_ID)
             return msg.reply("Apenas o Crespo pode resetar a memória.");
         userMemory[msg.author.id] = [];
-        return msg.reply("Memória curta **desse utilizador** foi resetada!");
+        return msg.reply("Memória curta deste usuário foi resetada com sucesso.");
     }
 
     // _time
     if (content.startsWith("_time ")) {
         const query = content.slice(6).trim();
-        const thinking = await msg.reply("A calcular...");
+        const thinking = await msg.reply("Calculando horário com base em UTC...");
         const respostaTempo = await obterHoraLugar(query);
         return thinking.edit(respostaTempo);
     }
@@ -374,7 +422,7 @@ client.on(Events.MessageCreate, async (msg) => {
     // _where
     if (content.startsWith("_where ")) {
         const lugar = content.slice(7).trim();
-        const thinking = await msg.reply("A procurar localização...");
+        const thinking = await msg.reply("Localizando coordenadas aproximadas...");
         const resposta = await whereLugar(lugar);
         return thinking.edit(resposta);
     }
@@ -382,7 +430,7 @@ client.on(Events.MessageCreate, async (msg) => {
     // _search
     if (content.startsWith("_search ")) {
         const termo = content.slice(8).trim();
-        const thinking = await msg.reply("A pesquisar...");
+        const thinking = await msg.reply("Realizando pesquisa externa...");
         const resposta = await pesquisarTermo(termo);
         return thinking.edit(resposta);
     }
@@ -415,17 +463,17 @@ client.on(Events.MessageCreate, async (msg) => {
 
     if (!textoUser && !isReplyToBot) {
         return msg.reply(
-            "O meu prefixo neste universo é _. Para falar comigo manda @CraspoBot∛ com uma mensagem depois!"
+            "Meu prefixo neste servidor é _. Para falar comigo, use um comando ou mencione-me com uma mensagem em seguida."
         );
     }
 
     if (!textoUser && isReplyToBot) {
-        // se for reply sem texto, não faz nada
+        // reply vazio, ignora
         return;
     }
 
     const contexto = userMemory[msg.author.id].join("\n");
-    const thinkingMsg = await msg.reply("A pensar com CrespoIS...");
+    const thinkingMsg = await msg.reply("Processando sua solicitação com precisão atômica...");
 
     const start = Date.now();
     const respostaIA = await gerarIA(textoUser, contexto, msg.author.username);
