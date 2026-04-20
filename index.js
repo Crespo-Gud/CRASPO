@@ -6,7 +6,6 @@ require("dotenv").config();
 const { Client, GatewayIntentBits, Partials, Events, EmbedBuilder } = require("discord.js");
 const fetch = require("node-fetch");
 const os = require("os");
-});
 
 // =========================
 //   CONFIG
