@@ -6,16 +6,6 @@ require("dotenv").config();
 const { Client, GatewayIntentBits, Partials, Events, EmbedBuilder } = require("discord.js");
 const fetch = require("node-fetch");
 const os = require("os");
-
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ],
-    partials: [
-        Partials.Channel,
-        Partials.Message
     ]
 });
 
@@ -27,6 +17,18 @@ const TOKEN = process.env.TOKEN;
 const GROQ_KEY = process.env.GROQ_KEY;
 const GOOGLE_KEY = process.env.GOOGLE_KEY;
 const OPENWEATHER_KEY = process.env.OPENWEATHER_KEY;
+
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.DirectMessages
+    ],
+    partials: [Partials.Channel]
+});
+
+const startTime = Date.now();
 
 // =========================
 //   IA (Groq) — função simples
