@@ -7,6 +7,18 @@ const { Client, GatewayIntentBits, Partials, Events, EmbedBuilder } = require("d
 const fetch = require("node-fetch");
 const os = require("os");
 
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ],
+    partials: [
+        Partials.Channel,
+        Partials.Message
+    ]
+});
+
 // =========================
 //   CONFIG
 // =========================
