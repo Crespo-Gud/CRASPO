@@ -1,5 +1,7 @@
 // index.js — CrespoA.I.C.S. PRO (Google + OpenWeather + Wikipedia, tudo em embed)
 
+console.log("VERSÃO:", require("discord.js").version);
+
 require("dotenv").config();
 const { Client, GatewayIntentBits, Partials, Events, EmbedBuilder } = require("discord.js");
 const fetch = require("node-fetch");
