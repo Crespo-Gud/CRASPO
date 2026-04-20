@@ -1,35 +1,19 @@
+// index.js — CrespoA.I.C.S. PRO (Google + OpenWeather + Wikipedia, tudo em embed)
+
 require("dotenv").config();
-const {
-    Client,
-    GatewayIntentBits,
-    Events,
-    Partials,
-    EmbedBuilder
-} = require("discord.js");
+const { Client, GatewayIntentBits, Partials, Events, EmbedBuilder } = require("discord.js");
 const fetch = require("node-fetch");
-const http = require("http");
 const os = require("os");
 
-// Keep-alive Railway
-http.createServer((req, res) => {
-    res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("OK");
-}).listen(process.env.PORT || 8000);
+// =========================
+//   CONFIG
+// =========================
 
-// Config
-const OWNER_ID = "1364280936304218155";
+const TOKEN = process.env.TOKEN;
 const GROQ_KEY = process.env.GROQ_KEY;
+const GOOGLE_KEY = process.env.GOOGLE_KEY;
+const OPENWEATHER_KEY = process.env.OPENWEATHER_KEY;
 
-// Estado
-let emojisEnabled = true;
-
-// Memória por usuário por canal
-let memory = {}; // limite 10
-
-// Uptime
-const startTime = Date.now();
-
-// Bot
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -37,471 +21,626 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.DirectMessages
     ],
-    partials: [Partials.Channel, Partials.Message]
+    partials: [Partials.Channel]
 });
 
-// Helpers
-function randomCreatorName() {
-    const nomes = ["Crespo", "Crespo Gamer", "crespo_gamer."];
-    return nomes[Math.floor(Math.random() * nomes.length)];
-}
+const startTime = Date.now();
 
-function formatThinkingTime(seconds) {
-    const s = seconds.toFixed(3);
-    return emojisEnabled ? `⏱️ Pensei durante: ${s}s` : `Pensei durante: ${s}s`;
-}
+// =========================
+//   IA (Groq) — função simples
+// =========================
 
-function limpar(p) {
-    return p.replace(/[^a-zA-ZÀ-ÿ]/g, "").trim();
-}
-
-function extrairNomePrincipal(username) {
-    if (!username) return "Usuário";
-    let nome = username.trim();
-    const partes = nome.split(/\s+/);
-
-    const lixo = [
-        "xx","xX","XX","Xx",
-        "oficial","official",
-        "dev","gamer","br","pt","ptbr","brasil","portugal"
-    ];
-
-    for (let p of partes) {
-        let limpo = limpar(p);
-        if (!limpo) continue;
-        const lower = limpo.toLowerCase();
-        if (lixo.includes(lower)) continue;
-        if (/\d/.test(limpo)) continue;
-        return limpo[0].toUpperCase() + limpo.slice(1).toLowerCase();
-    }
-
-    let fallback = limpar(partes[0]);
-    if (!fallback) return "Usuário";
-    return fallback[0].toUpperCase() + fallback.slice(1).toLowerCase();
-}
-
-function formatUptime(ms) {
-    let s = Math.floor(ms / 1000);
-    const d = Math.floor(s / 86400); s %= 86400;
-    const h = Math.floor(s / 3600); s %= 3600;
-    const m = Math.floor(s / 60); s %= 60;
-    const partes = [];
-    if (d) partes.push(`${d}d`);
-    if (h) partes.push(`${h}h`);
-    if (m) partes.push(`${m}m`);
-    if (s || partes.length === 0) partes.push(`${s}s`);
-    return partes.join(" ");
-}
-
-// IA leve
 async function askGroqSimple(prompt) {
-    const body = {
-        model: "llama-3.3-70b-versatile",
-        messages: [
-            { role: "system", content: "Responda de forma extremamente objetiva, sem explicações extras." },
-            { role: "user", content: prompt }
-        ]
-    };
-
     try {
-        const resposta = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
             headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${GROQ_KEY}`
+                "Authorization": `Bearer ${GROQ_KEY}`,
+                "Content-Type": "application/json"
             },
-            body: JSON.stringify(body)
+            body: JSON.stringify({
+                model: "llama-3.1-70b-versatile",
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.4
+            })
         });
-
-        const data = await resposta.json();
-        return data?.choices?.[0]?.message?.content?.trim() || null;
-    } catch (err) {
-        console.error("Erro askGroqSimple:", err);
+        if (!res.ok) {
+            console.error("Groq error:", await res.text());
+            return null;
+        }
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content?.trim() || null;
+    } catch (e) {
+        console.error("Groq exception:", e);
         return null;
     }
 }
 
-// IA principal
-async function gerarIA(prompt, contexto, autorUsername) {
-    const creatorName = randomCreatorName();
-    const nomePrincipal = extrairNomePrincipal(autorUsername);
+// =========================
+//   HELPERS GERAIS
+// =========================
 
-    const palavrasTema = [
-        "átomo","eletrão","protão","neutrão","neuton",
-        "força gravitacional","força","satélite","espaço",
-        "cratera","sismo","molécula","fissão","nuclear",
-        "velocidade","acelerador de partículas","plasma","urânio"
-    ];
+function formatUptime(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const parts = [];
+    if (days) parts.push(`${days}d`);
+    if (hours) parts.push(`${hours}h`);
+    if (minutes) parts.push(`${minutes}m`);
+    if (seconds || parts.length === 0) parts.push(`${seconds}s`);
+    return parts.join(" ");
+}
 
-    const body = {
-        model: "llama-3.3-70b-versatile",
-        messages: [
-            {
-                role: "system",
-                content: `
-Você é o CraspoBot∛.
+function formatCoords(lat, lon) {
+    const ns = lat >= 0 ? "N" : "S";
+    const ew = lon >= 0 ? "E" : "W";
+    return `${Math.abs(lat).toFixed(2)}° ${ns}, ${Math.abs(lon).toFixed(2)}° ${ew}`;
+}
 
-IDENTIDADE:
-- Criado por ${creatorName}.
-- Espírito inspirado num labrador preto adulto.
-- Parte da CrespoIS — Crespo Intelligence System.
+function buildMapsLink(lat, lon) {
+    return `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+}
 
-LINGUAGEM:
-- Responda sempre em português do Brasil.
-- Tom técnico, educado, claro.
-- Humor nuclear suave.
-- Use como inspiração: ${palavrasTema.join(", ")}.
-- Corrija automaticamente erros de português.
+// =========================
+//   GOOGLE: GEOCODING + TIMEZONE
+// =========================
 
-TRATAMENTO:
-- Use "você".
-- Nome do usuário: "${nomePrincipal}".
-
-MEMÓRIA:
-${contexto}
-
-OBJETIVO:
-- Responder de forma natural, fluida e contextual.
-`
-            },
-            { role: "user", content: prompt }
-        ]
+async function geocodePlace(query) {
+    const url =
+        "https://maps.googleapis.com/maps/api/geocode/json?address=" +
+        encodeURIComponent(query) +
+        `&key=${GOOGLE_KEY}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Geocoding HTTP error");
+    const data = await res.json();
+    if (!data.results || data.results.length === 0) return null;
+    const r = data.results[0];
+    const loc = r.geometry.location;
+    const countryComp = r.address_components.find(c => c.types.includes("country"));
+    const country = countryComp ? countryComp.long_name : "Unknown";
+    return {
+        formatted: r.formatted_address,
+        country,
+        lat: loc.lat,
+        lon: loc.lng
     };
-
-    try {
-        const resposta = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${GROQ_KEY}`
-            },
-            body: JSON.stringify(body)
-        });
-
-        const data = await resposta.json();
-        const out = data?.choices?.[0]?.message?.content?.trim();
-
-        if (out) return out;
-
-        const fallback = await askGroqSimple(prompt);
-        return fallback || "O núcleo conversacional entrou em oscilação temporária.";
-    } catch (err) {
-        console.error("Erro gerarIA:", err);
-        const fallback = await askGroqSimple(prompt);
-        return fallback || "Falha interna ao processar.";
-    }
 }
 
-// Comandos
-const publicCommands = {
-    "_id": "Mostra o seu ID.",
-    "_time": "Mostra a hora via UTC ou cidade.",
-    "_where": "Mostra localização aproximada.",
-    "_search": "Pesquisa no DuckDuckGo + Wikipedia.",
-    "_weather": "Mostra o estado do tempo numa cidade.",
-    "_info": "Mostra informações do usuário e do sistema.",
-    "_ping": "Mostra a latência do bot.",
-    "_uptime": "Mostra há quanto tempo o bot está online.",
-    "_version": "Mostra a versão do CrespoA.I.C.S.",
-    "_system": "Mostra estado técnico do sistema.",
-    "_emojis enabled": "Ativa emojis.",
-    "_emojis disabled": "Desativa emojis.",
-    "_commands": "Lista comandos públicos."
-};
+async function getTimeZone(lat, lon) {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const url =
+        "https://maps.googleapis.com/maps/api/timezone/json?location=" +
+        `${lat},${lon}&timestamp=${timestamp}&key=${GOOGLE_KEY}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Timezone HTTP error");
+    const data = await res.json();
+    if (data.status !== "OK") return null;
 
-const adminCommands = {
-    "_reset": "Limpa memória deste usuário neste canal.",
-    "_shutdown": "Reinicia o bot.",
-    "_adm-cmd": "Lista comandos administrativos."
-};
+    const raw = data.rawOffset || 0;
+    const dst = data.dstOffset || 0;
+    const totalOffset = raw + dst; // em segundos
+    const offsetHours = totalOffset / 3600;
 
-// Embed PRO CrespoIS
-function embedCrespoIS(titulo, descricao) {
-    return new EmbedBuilder()
-        .setColor("#4A90E2")
-        .setTitle(`📡 CrespoA.I.C.S. — ${titulo}`)
-        .setDescription(descricao)
-        .setFooter({ text: "CrespoIS • Núcleo Técnico" })
-        .setTimestamp();
+    const sign = offsetHours >= 0 ? "+" : "-";
+    const abs = Math.abs(offsetHours);
+    const h = Math.floor(abs);
+    const m = Math.round((abs - h) * 60);
+    const utcStr = `UTC${sign}${h}${m ? ":" + String(m).padStart(2, "0") : ""}`;
+
+    const localMs = Date.now() + totalOffset * 1000 - new Date().getTimezoneOffset() * 60000;
+    const localDate = new Date(localMs);
+    const localStr = localDate.toISOString().replace("T", " ").slice(0, 19);
+
+    return {
+        timeZoneId: data.timeZoneId,
+        utc: utcStr,
+        localTime: localStr
+    };
 }
 
-// Ready
+// =========================
+//   OPENWEATHER: CLIMA + PREVISÃO
+// =========================
+
+async function getWeatherAndForecast(lat, lon, lang = "pt") {
+    const url =
+        "https://api.openweathermap.org/data/3.0/onecall?lat=" +
+        lat +
+        "&lon=" +
+        lon +
+        `&appid=${OPENWEATHER_KEY}&units=metric&lang=${lang}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("OpenWeather HTTP error");
+    const data = await res.json();
+    if (!data.current || !data.daily) return null;
+
+    const current = data.current;
+    const today = data.daily[0];
+    const tomorrow = data.daily[1];
+
+    return {
+        current: {
+            temp: current.temp,
+            feels: current.feels_like,
+            humidity: current.humidity,
+            wind: current.wind_speed,
+            desc: current.weather?.[0]?.description || "N/A"
+        },
+        today: {
+            min: today.temp?.min,
+            max: today.temp?.max,
+            desc: today.weather?.[0]?.description || "N/A"
+        },
+        tomorrow: tomorrow
+            ? {
+                  min: tomorrow.temp?.min,
+                  max: tomorrow.temp?.max,
+                  desc: tomorrow.weather?.[0]?.description || "N/A"
+              }
+            : null
+    };
+}
+
+// =========================
+//   WIKIPEDIA SUMMARY
+// =========================
+
+async function getWikipediaSummary(title) {
+    const url =
+        "https://en.wikipedia.org/api/rest_v1/page/summary/" +
+        encodeURIComponent(title);
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+        title: data.title,
+        extract: data.extract || null,
+        url: data.content_urls?.desktop?.page || null,
+        thumb: data.thumbnail?.source || null
+    };
+}
+
+// =========================
+//   DISCORD BOT
+// =========================
+
 client.once(Events.ClientReady, () => {
-    console.log(`CraspoBot∛ ligado como ${client.user.tag}`);
-    client.user.setPresence({
-        activities: [{ name: "_commands | vértice CrespoIS", type: 0 }],
-        status: "online"
-    });
+    console.log(`CrespoA.I.C.S. online como ${client.user.tag}`);
 });
-// =========================
-//   HANDLER DE MENSAGENS
-// =========================
 
 client.on(Events.MessageCreate, async (msg) => {
-    if (msg.author.bot) return;
+    try {
+        if (msg.author.bot) return;
+        if (!msg.content) return;
 
-    const canal = msg.channel.id;
-    const user = msg.author.id;
+        const content = msg.content.trim();
 
-    if (!memory[canal]) memory[canal] = {};
-    if (!memory[canal][user]) memory[canal][user] = [];
+        // =========================
+        //   IA LIVRE (ex: começa com "cresco" ou algo teu)
+        // =========================
 
-    memory[canal][user].push(msg.content);
-    if (memory[canal][user].length > 10) memory[canal][user].shift();
+        if (content.startsWith("_ia ")) {
+            const prompt = content.slice(4).trim();
+            if (!prompt) return msg.reply("Escreve algo depois de `_ia`.");
+            const thinking = await msg.reply("Processando sinal neural CrespoA.I.C.S....");
 
-    const content = msg.content.trim();
+            const resposta = await askGroqSimple(prompt);
+            if (!resposta) {
+                return thinking.edit("Não consegui obter resposta da IA agora.");
+            }
 
-    // =========================
-    //   COMANDOS PÚBLICOS
-    // =========================
-
-    if (content === "_commands") {
-        let texto = "";
-        for (const cmd in publicCommands) texto += `**${cmd}** → ${publicCommands[cmd]}\n`;
-        return msg.reply({ embeds: [embedCrespoIS("Comandos Públicos", texto)] });
-    }
-
-    if (content === "_id") {
-        return msg.reply("O seu ID é: **" + user + "**");
-    }
-
-    if (content === "_emojis enabled") {
-        emojisEnabled = true;
-        return msg.reply("Emojis ativados.");
-    }
-
-    if (content === "_emojis disabled") {
-        emojisEnabled = false;
-        return msg.reply("Emojis desativados.");
-    }
-
-    // =========================
-    //   COMANDOS ADMIN
-    // =========================
-
-    if (content === "_adm-cmd") {
-        if (user !== OWNER_ID) return msg.reply("Apenas o Crespo pode ver estes comandos.");
-        let texto = "";
-        for (const cmd in adminCommands) texto += `**${cmd}** → ${adminCommands[cmd]}\n`;
-        return msg.reply({ embeds: [embedCrespoIS("Comandos Administrativos", texto)] });
-    }
-
-    if (content === "_shutdown") {
-        if (user !== OWNER_ID) return msg.reply("Apenas o Crespo pode reiniciar.");
-        await msg.reply("Reiniciando núcleo...");
-        process.exit(1);
-    }
-
-    if (content === "_reset") {
-        if (user !== OWNER_ID) return msg.reply("Apenas o Crespo pode resetar memória.");
-        memory[canal][user] = [];
-        return msg.reply("Memória deste usuário neste canal foi resetada.");
-    }
-
-    // =========================
-    //   _time
-    // =========================
-
-    if (content.startsWith("_time ")) {
-        const query = content.slice(6).trim();
-        const thinking = await msg.reply("Calculando horário...");
-        const respostaTempo = await obterHoraLugar(query);
-        return thinking.edit(respostaTempo);
-    }
-
-    // =========================
-    //   _where
-    // =========================
-
-    if (content.startsWith("_where ")) {
-        const lugar = content.slice(7).trim();
-        const thinking = await msg.reply("Localizando...");
-        const resposta = await whereLugar(lugar);
-        return thinking.edit(resposta);
-    }
-
-    // =========================
-    //   _search (embed PRO)
-    // =========================
-
-    if (content.startsWith("_search ")) {
-        const termo = content.slice(8).trim();
-        if (!termo) return msg.reply("Use `_search <termo>`.");
-
-        const thinking = await msg.reply("Consultando bases de dados orbitais...");
-
-        const ddgRes = await fetch(
-            "https://api.duckduckgo.com/?format=json&no_redirect=1&no_html=1&q=" +
-            encodeURIComponent(termo)
-        );
-        const ddg = await ddgRes.json();
-
-        const wikiRes = await fetch(
-            "https://en.wikipedia.org/api/rest_v1/page/summary/" +
-            encodeURIComponent(termo)
-        );
-
-        let ddgResumo = ddg.AbstractText || "Nenhum resumo encontrado.";
-        let wikiResumo = "Nenhum resumo disponível.";
-
-        if (wikiRes.ok) {
-            const wiki = await wikiRes.json();
-            if (wiki.extract) wikiResumo = wiki.extract;
+            return thinking.edit(resposta);
         }
 
-        const embed = new EmbedBuilder()
-            .setTitle("📡 CrespoA.I.C.S. — Pesquisa")
-            .setColor("#4A90E2")
-            .setDescription(`Resultados para **${termo}**`)
-            .addFields(
-                { name: "DuckDuckGo", value: ddgResumo.slice(0, 1024) },
-                { name: "Wikipedia", value: wikiResumo.slice(0, 1024) }
-            )
-            .setFooter({ text: "CrespoIS • Núcleo Técnico" })
-            .setTimestamp();
+        // =========================
+        //   _search (Wikipedia, embed PRO)
+        // =========================
 
-        return thinking.edit({ content: " ", embeds: [embed] });
-    }
+        if (content.startsWith("_search ")) {
+            const termo = content.slice(8).trim();
+            if (!termo) return msg.reply("Use `_search <termo>`.");
 
-    // =========================
-    //   _weather (texto simples)
-    // =========================
+            const thinking = await msg.reply("Consultando bases enciclopédicas...");
 
-    if (content.startsWith("_weather ")) {
-        const cidade = content.slice(9).trim();
-        if (!cidade) return msg.reply("Use `_weather <cidade>`.");
+            const wiki = await getWikipediaSummary(termo);
+            if (!wiki) {
+                return thinking.edit("Não encontrei nada relevante na Wikipedia.");
+            }
 
-        const thinking = await msg.reply("Ajustando sensores meteorológicos...");
+            const embed = new EmbedBuilder()
+                .setTitle(`📡 CrespoA.I.C.S. — Pesquisa: ${wiki.title}`)
+                .setColor("#4A90E2")
+                .setDescription(wiki.extract || "Nenhum resumo disponível.")
+                .setFooter({ text: "Fonte: Wikipedia • CrespoIS • Núcleo Técnico" })
+                .setTimestamp();
 
-        try {
-            const res = await fetch("https://wttr.in/" + encodeURIComponent(cidade) + "?format=3");
-            const txt = await res.text();
-            return thinking.edit(`Clima em **${cidade}**:\n${txt}`);
-        } catch (e) {
-            console.error("Erro _weather:", e);
-            return thinking.edit("Não consegui obter o clima agora.");
+            if (wiki.url) {
+                embed.addFields({
+                    name: "🔗 Link",
+                    value: wiki.url
+                });
+            }
+
+            if (wiki.thumb) {
+                embed.setThumbnail(wiki.thumb);
+            }
+
+            return thinking.edit({ content: " ", embeds: [embed] });
         }
-    }
 
-    // =========================
-    //   _info
-    // =========================
+        // =========================
+        //   _where (embed PRO)
+        // =========================
 
-    if (content === "_info") {
-        const userInfo =
-            `__Usuário:__ **${msg.author.tag}**\n` +
-            `ID: \`${msg.author.id}\`\n` +
-            `Bot: **${msg.author.bot ? "sim" : "não"}**\n` +
-            `Criado em: ${msg.author.createdAt.toISOString().slice(0, 10)}`;
+        if (content.startsWith("_where ")) {
+            const lugar = content.slice(7).trim();
+            if (!lugar) return msg.reply("Use `_where <lugar>`.");
 
-        const uptime = formatUptime(Date.now() - startTime);
-        const sysInfo =
-            `__Sistema CrespoA.I.C.S.__\n` +
-            `Versão: **1.0.0-PRO**\n` +
-            `Uptime: **${uptime}**\n` +
-            `Plataforma: \`${os.platform()}\`\n` +
-            `CPU: \`${os.cpus()[0].model}\``;
+            const thinking = await msg.reply("Localizando coordenadas orbitais...");
 
-        return msg.reply(`${userInfo}\n\n${sysInfo}`);
-    }
+            const geo = await geocodePlace(lugar);
+            if (!geo) {
+                return thinking.edit("Não consegui localizar esse lugar.");
+            }
 
-    // =========================
-    //   _ping
-    // =========================
+            const coordsStr = formatCoords(geo.lat, geo.lon);
+            const mapsLink = buildMapsLink(geo.lat, geo.lon);
 
-    if (content === "_ping") {
-        const before = Date.now();
-        const pongMsg = await msg.reply("Medindo latência...");
-        const latency = Date.now() - before;
-        const apiLatency = Math.round(client.ws.ping || 0);
-        return pongMsg.edit(`__Ping:__ **${latency}ms**\n__API:__ **${apiLatency}ms**`);
-    }
+            const embed = new EmbedBuilder()
+                .setTitle("📡 CrespoA.I.C.S. — Localização")
+                .setColor("#4A90E2")
+                .setDescription(`Resultado para **${lugar}**`)
+                .addFields(
+                    { name: "📍 Nome", value: geo.formatted, inline: false },
+                    { name: "🌍 País", value: geo.country, inline: true },
+                    { name: "🧭 Coordenadas", value: coordsStr, inline: true },
+                    { name: "🗺️ Google Maps", value: mapsLink, inline: false }
+                )
+                .setFooter({ text: "CrespoIS • Núcleo Técnico" })
+                .setTimestamp();
 
-    // =========================
-    //   _uptime
-    // =========================
+            return thinking.edit({ content: " ", embeds: [embed] });
+        }
 
-    if (content === "_uptime") {
-        const uptime = formatUptime(Date.now() - startTime);
-        return msg.reply(`__Uptime do núcleo CrespoA.I.C.S.:__ **${uptime}**`);
-    }
+        // =========================
+        //   _time (embed PRO)
+        // =========================
 
-    // =========================
-    //   _version
-    // =========================
+        if (content.startsWith("_time ")) {
+            const lugar = content.slice(6).trim();
+            if (!lugar) return msg.reply("Use `_time <lugar>`.");
 
-    if (content === "_version") {
-        return msg.reply(
-            `__CrespoA.I.C.S.__\n` +
-            `Versão do núcleo: **1.0.0-PRO**\n` +
-            `Modelo IA: **llama-3.3-70b-versatile**`
-        );
-    }
+            const thinking = await msg.reply("Sincronizando relógios orbitais...");
 
-    // =========================
-    //   _system
-    // =========================
+            const geo = await geocodePlace(lugar);
+            if (!geo) {
+                return thinking.edit("Não consegui localizar esse lugar.");
+            }
 
-    if (content === "_system") {
-        const mem = process.memoryUsage();
-        const rssMB = (mem.rss / 1024 / 1024).toFixed(1);
-        const heapMB = (mem.heapUsed / 1024 / 1024).toFixed(1);
-        const uptime = formatUptime(Date.now() - startTime);
+            const tz = await getTimeZone(geo.lat, geo.lon);
+            if (!tz) {
+                return thinking.edit("Não consegui obter o fuso horário.");
+            }
 
-        const txt =
-            `__Estado do sistema CrespoA.I.C.S.__\n` +
-            `Uptime: **${uptime}**\n` +
-            `Memória RSS: **${rssMB} MB**\n` +
-            `Heap usado: **${heapMB} MB**\n` +
-            `Plataforma: \`${os.platform()}\`\n` +
-            `CPUs: **${os.cpus().length}**`;
+            const coordsStr = formatCoords(geo.lat, geo.lon);
 
-        return msg.reply(txt);
-    }
+            const embed = new EmbedBuilder()
+                .setTitle("⏱️ CrespoA.I.C.S. — Horário Local")
+                .setColor("#4A90E2")
+                .setDescription(`Informações de tempo para **${geo.formatted}**`)
+                .addFields(
+                    { name: "🕒 Hora local", value: tz.localTime, inline: false },
+                    { name: "🌐 Fuso horário", value: tz.timeZoneId, inline: true },
+                    { name: "🧭 UTC", value: tz.utc, inline: true },
+                    { name: "🧭 Coordenadas", value: coordsStr, inline: false }
+                )
+                .setFooter({ text: "Dados via Google Time Zone API • CrespoIS" })
+                .setTimestamp();
 
-    // =========================
-    //   IA (texto simples)
-    // =========================
+            return thinking.edit({ content: " ", embeds: [embed] });
+        }
 
-    const isMention =
-        msg.mentions.has(client.user) ||
-        content.startsWith(`<@${client.user.id}>`) ||
-        content.startsWith(`<@!${client.user.id}>`);
+        // =========================
+        //   _weather (embed PRO, clima + previsão)
+        // =========================
 
-    let isReplyToBot = false;
-    if (msg.reference?.messageId) {
+        if (content.startsWith("_weather ")) {
+            const lugar = content.slice(9).trim();
+            if (!lugar) return msg.reply("Use `_weather <cidade>`.");
+
+            const thinking = await msg.reply("Ajustando sensores meteorológicos...");
+
+            const geo = await geocodePlace(lugar);
+            if (!geo) {
+                return thinking.edit("Não consegui localizar essa cidade.");
+            }
+
+            const meteo = await getWeatherAndForecast(geo.lat, geo.lon, "pt");
+            if (!meteo) {
+                return thinking.edit("Não consegui obter dados meteorológicos.");
+            }
+
+            const coordsStr = formatCoords(geo.lat, geo.lon);
+            const mapsLink = buildMapsLink(geo.lat, geo.lon);
+
+            const current = meteo.current;
+            const today = meteo.today;
+            const tomorrow = meteo.tomorrow;
+
+            let previsaoHoje = `Mín: ${today.min.toFixed(1)}°C • Máx: ${today.max.toFixed(1)}°C\n${today.desc}`;
+            let previsaoAmanha = tomorrow
+                ? `Mín: ${tomorrow.min.toFixed(1)}°C • Máx: ${tomorrow.max.toFixed(1)}°C\n${tomorrow.desc}`
+                : "Sem dados.";
+
+            const embed = new EmbedBuilder()
+                .setTitle(`🌦️ CrespoA.I.C.S. — Clima em ${geo.formatted}`)
+                .setColor("#4A90E2")
+                .addFields(
+                    {
+                        name: "🌡️ Condições atuais",
+                        value:
+                            `Temperatura: **${current.temp.toFixed(1)}°C** (sensação **${current.feels.toFixed(1)}°C**)\n` +
+                            `Humidade: **${current.humidity}%**\n` +
+                            `Vento: **${current.wind} m/s**\n` +
+                            `Descrição: **${current.desc}**`
+                    },
+                    {
+                        name: "📅 Hoje",
+                        value: previsaoHoje
+                    },
+                    {
+                        name: "📅 Amanhã",
+                        value: previsaoAmanha
+                    },
+                    {
+                        name: "🧭 Coordenadas",
+                        value: coordsStr,
+                        inline: true
+                    },
+                    {
+                        name: "🗺️ Google Maps",
+                        value: mapsLink,
+                        inline: false
+                    }
+                )
+                .setFooter({ text: "Dados via OpenWeather • CrespoIS • Núcleo Técnico" })
+                .setTimestamp();
+
+            return thinking.edit({ content: " ", embeds: [embed] });
+        }
+
+        // =========================
+        //   _info-pt / _info-en (embed PRO cidade + clima + amanhã + resumo)
+        // =========================
+
+        if (content.startsWith("_info-pt ") || content.startsWith("_info-en ")) {
+            const isPt = content.startsWith("_info-pt ");
+            const lugar = content.slice(isPt ? 9 : 9).trim(); // ambos têm 9 chars
+            if (!lugar) {
+                return msg.reply(isPt ? "Use `_info-pt <cidade>`." : "Use `_info-en <city>`.");
+            }
+
+            const thinking = await msg.reply(
+                isPt
+                    ? "Compilando dossiê técnico da região..."
+                    : "Compiling technical dossier for the region..."
+            );
+
+            const geo = await geocodePlace(lugar);
+            if (!geo) {
+                return thinking.edit(isPt ? "Não consegui localizar essa cidade." : "Could not locate that city.");
+            }
+
+            const tz = await getTimeZone(geo.lat, geo.lon);
+            const meteo = await getWeatherAndForecast(geo.lat, geo.lon, isPt ? "pt" : "en");
+            const wiki = await getWikipediaSummary(geo.formatted);
+
+            const coordsStr = formatCoords(geo.lat, geo.lon);
+            const mapsLink = buildMapsLink(geo.lat, geo.lon);
+
+            const title = isPt
+                ? `📡 CrespoA.I.C.S. — Info: ${geo.formatted}`
+                : `📡 CrespoA.I.C.S. — Info: ${geo.formatted}`;
+
+            const embed = new EmbedBuilder()
+                .setTitle(title)
+                .setColor("#4A90E2")
+                .setFooter({ text: "CrespoIS • Núcleo Técnico" })
+                .setTimestamp();
+
+            // Campos base
+            embed.addFields(
+                {
+                    name: isPt ? "📍 Cidade" : "📍 City",
+                    value: geo.formatted,
+                    inline: false
+                },
+                {
+                    name: isPt ? "🌍 País" : "🌍 Country",
+                    value: geo.country,
+                    inline: true
+                },
+                {
+                    name: isPt ? "🧭 Coordenadas" : "🧭 Coordinates",
+                    value: coordsStr,
+                    inline: true
+                },
+                {
+                    name: isPt ? "🗺️ Google Maps" : "🗺️ Google Maps",
+                    value: mapsLink,
+                    inline: false
+                }
+            );
+
+            // Tempo / fuso
+            if (tz) {
+                embed.addFields(
+                    {
+                        name: isPt ? "⏱️ Hora local" : "⏱️ Local time",
+                        value: tz.localTime,
+                        inline: false
+                    },
+                    {
+                        name: isPt ? "🌐 Fuso horário" : "🌐 Time zone",
+                        value: tz.timeZoneId,
+                        inline: true
+                    },
+                    {
+                        name: "🧭 UTC",
+                        value: tz.utc,
+                        inline: true
+                    }
+                );
+            }
+
+            // Clima atual + previsão de amanhã
+            if (meteo) {
+                const current = meteo.current;
+                const tomorrow = meteo.tomorrow;
+
+                const climaLabel = isPt ? "🌦️ Clima atual" : "🌦️ Current weather";
+                const climaValue =
+                    (isPt
+                        ? `Temperatura: **${current.temp.toFixed(1)}°C** (sensação **${current.feels.toFixed(1)}°C**)\n`
+                        : `Temperature: **${current.temp.toFixed(1)}°C** (feels like **${current.feels.toFixed(1)}°C**)\n`) +
+                    (isPt
+                        ? `Humidade: **${current.humidity}%**\nVento: **${current.wind} m/s**\n`
+                        : `Humidity: **${current.humidity}%**\nWind: **${current.wind} m/s**\n`) +
+                    (isPt ? `Descrição: **${current.desc}**` : `Description: **${current.desc}**`);
+
+                embed.addFields({
+                    name: climaLabel,
+                    value: climaValue,
+                    inline: false
+                });
+
+                if (tomorrow) {
+                    const prevLabel = isPt ? "📅 Previsão para amanhã" : "📅 Tomorrow's forecast";
+                    const prevValue = isPt
+                        ? `Mín: **${tomorrow.min.toFixed(1)}°C** • Máx: **${tomorrow.max.toFixed(1)}°C**\n${tomorrow.desc}`
+                        : `Min: **${tomorrow.min.toFixed(1)}°C** • Max: **${tomorrow.max.toFixed(1)}°C**\n${tomorrow.desc}`;
+
+                    embed.addFields({
+                        name: prevLabel,
+                        value: prevValue,
+                        inline: false
+                    });
+                }
+            }
+
+            // Resumo Wikipedia
+            if (wiki && wiki.extract) {
+                embed.addFields({
+                    name: isPt ? "📚 Resumo (Wikipedia)" : "📚 Summary (Wikipedia)",
+                    value: wiki.extract.slice(0, 1024)
+                });
+            }
+
+            if (wiki && wiki.url) {
+                embed.addFields({
+                    name: "🔗 Wikipedia",
+                    value: wiki.url
+                });
+            }
+
+            if (wiki && wiki.thumb) {
+                embed.setThumbnail(wiki.thumb);
+            }
+
+            return thinking.edit({ content: " ", embeds: [embed] });
+        }
+
+        // =========================
+        //   _info (fallback antigo, se quiseres manter)
+        // =========================
+
+        if (content === "_info") {
+            const uptime = formatUptime(Date.now() - startTime);
+
+            const embed = new EmbedBuilder()
+                .setTitle("📡 CrespoA.I.C.S. — Sistema")
+                .setColor("#4A90E2")
+                .addFields(
+                    {
+                        name: "👤 Usuário",
+                        value:
+                            `Tag: **${msg.author.tag}**\n` +
+                            `ID: \`${msg.author.id}\`\n` +
+                            `Bot: **${msg.author.bot ? "sim" : "não"}**\n` +
+                            `Criado em: ${msg.author.createdAt.toISOString().slice(0, 10)}`
+                    },
+                    {
+                        name: "🖥️ Sistema CrespoA.I.C.S.",
+                        value:
+                            `Versão: **1.0.0-PRO**\n` +
+                            `Uptime: **${uptime}**\n` +
+                            `Plataforma: \`${os.platform()}\`\n` +
+                            `CPU: \`${os.cpus()[0].model}\``
+                    }
+                )
+                .setFooter({ text: "CrespoIS • Núcleo Técnico" })
+                .setTimestamp();
+
+            return msg.reply({ embeds: [embed] });
+        }
+
+        // =========================
+        //   _ping (embed PRO)
+        // =========================
+
+        if (content === "_ping") {
+            const before = Date.now();
+            const pongMsg = await msg.reply("Medindo latência...");
+            const latency = Date.now() - before;
+            const apiLatency = Math.round(client.ws.ping || 0);
+
+            const embed = new EmbedBuilder()
+                .setTitle("📡 CrespoA.I.C.S. — Ping")
+                .setColor("#4A90E2")
+                .addFields(
+                    { name: "⏱️ Latência", value: `**${latency}ms**`, inline: true },
+                    { name: "🌐 API", value: `**${apiLatency}ms**`, inline: true }
+                )
+                .setFooter({ text: "CrespoIS • Núcleo Técnico" })
+                .setTimestamp();
+
+            return pongMsg.edit({ content: " ", embeds: [embed] });
+        }
+
+        // =========================
+        //   _help (opcional)
+        // =========================
+
+        if (content === "_help") {
+            const embed = new EmbedBuilder()
+                .setTitle("📡 CrespoA.I.C.S. — Comandos")
+                .setColor("#4A90E2")
+                .setDescription("Lista de comandos disponíveis:")
+                .addFields(
+                    { name: "_ia <texto>", value: "Conversa com a IA CrespoA.I.C.S.", inline: false },
+                    { name: "_search <termo>", value: "Pesquisa resumo na Wikipedia.", inline: false },
+                    { name: "_where <lugar>", value: "Mostra coordenadas e link do Google Maps.", inline: false },
+                    { name: "_time <lugar>", value: "Mostra hora local, fuso e UTC.", inline: false },
+                    { name: "_weather <cidade>", value: "Clima atual + previsão hoje/amanhã.", inline: false },
+                    { name: "_info-pt <cidade>", value: "Resumo técnico da cidade em PT.", inline: false },
+                    { name: "_info-en <city>", value: "Technical city summary in EN.", inline: false },
+                    { name: "_info", value: "Info do sistema CrespoA.I.C.S.", inline: false },
+                    { name: "_ping", value: "Mostra latência do bot.", inline: false }
+                )
+                .setFooter({ text: "CrespoIS • Núcleo Técnico" })
+                .setTimestamp();
+
+            return msg.reply({ embeds: [embed] });
+        }
+    } catch (e) {
+        console.error("Erro no handler:", e);
         try {
-            const refMsg = await msg.channel.messages.fetch(msg.reference.messageId);
-            if (refMsg.author.id === client.user.id) isReplyToBot = true;
+            await msg.reply("Ocorreu um erro interno no módulo CrespoA.I.C.S.");
         } catch {}
     }
-
-    if (!isMention && !isReplyToBot) return;
-
-    let textoUser = content
-        .replace(`<@${client.user.id}>`, "")
-        .replace(`<@!${client.user.id}>`, "")
-        .trim();
-
-    if (!textoUser && !isReplyToBot) {
-        return msg.reply("Use um comando ou escreva algo após me mencionar.");
-    }
-
-    if (!textoUser && isReplyToBot) return;
-
-    const contexto = memory[canal][user].join("\n");
-    const thinkingMsg = await msg.reply("Processando com precisão atômica...");
-
-    const start = Date.now();
-    const respostaIA = await gerarIA(textoUser, contexto, msg.author.username);
-    const elapsed = (Date.now() - start) / 1000;
-
-    const finalText = `${formatThinkingTime(elapsed)}\n${respostaIA}`;
-    return thinkingMsg.edit(finalText);
 });
 
-// =========================
-//   LOGIN
-// =========================
-
-client.login(process.env.TOKEN);
+client.login(TOKEN);
