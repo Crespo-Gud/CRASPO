@@ -240,8 +240,6 @@ client.once(Events.ClientReady, () => {
 client.on(Events.MessageCreate, async (msg) => {
     if (msg.author.bot) return;
 
-    msg.channel.sendTyping();
-
     const canal = msg.channel.id;
     const user = msg.author.id;
 
