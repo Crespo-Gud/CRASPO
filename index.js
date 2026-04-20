@@ -8,6 +8,7 @@ const {
 } = require("discord.js");
 const fetch = require("node-fetch");
 const http = require("http");
+const os = require("os");
 
 // Keep-alive Railway
 http.createServer((req, res) => {
@@ -24,6 +25,9 @@ let emojisEnabled = true;
 
 // Memória por usuário por canal
 let memory = {}; // limite 10
+
+// Uptime
+const startTime = Date.now();
 
 // Bot
 const client = new Client({
@@ -74,6 +78,19 @@ function extrairNomePrincipal(username) {
     let fallback = limpar(partes[0]);
     if (!fallback) return "Usuário";
     return fallback[0].toUpperCase() + fallback.slice(1).toLowerCase();
+}
+
+function formatUptime(ms) {
+    let s = Math.floor(ms / 1000);
+    const d = Math.floor(s / 86400); s %= 86400;
+    const h = Math.floor(s / 3600); s %= 3600;
+    const m = Math.floor(s / 60); s %= 60;
+    const partes = [];
+    if (d) partes.push(`${d}d`);
+    if (h) partes.push(`${h}h`);
+    if (m) partes.push(`${m}m`);
+    if (s || partes.length === 0) partes.push(`${s}s`);
+    return partes.join(" ");
 }
 
 // IA leve
@@ -175,96 +192,18 @@ OBJETIVO:
     }
 }
 
-// _time
-async function obterHoraLugar(lugarOuUtc) {
-    const q = lugarOuUtc.trim();
-    const utcMatch = q.toUpperCase().match(/^UTC\s*([+-]\d{1,2})(?::?(\d{2}))?$/);
-
-    if (utcMatch) {
-        const horas = parseInt(utcMatch[1], 10);
-        const minutos = utcMatch[2] ? parseInt(utcMatch[2], 10) : 0;
-
-        const agora = new Date();
-        const utcMs = agora.getTime() + agora.getTimezoneOffset() * 60000;
-        const offsetMs = (horas * 60 + Math.sign(horas) * minutos) * 60000;
-        const alvo = new Date(utcMs + offsetMs);
-
-        return `Horário aproximado em ${q.toUpperCase()}: ${alvo.toISOString().replace("T"," ").slice(0,19)} (aprox.).`;
-    }
-
-    const pergunta = `Informe apenas o offset UTC atual da localidade "${q}" no formato UTC+H, UTC-H ou UTC+H:MM.`;
-    const resposta = await askGroqSimple(pergunta);
-    if (!resposta) return `Não consegui determinar o UTC de "${q}".`;
-
-    const matchIA = resposta.toUpperCase().match(/UTC\s*([+-]\d{1,2})(?::?(\d{2}))?/);
-    if (!matchIA) return `Não consegui interpretar o UTC de "${q}".`;
-
-    const horas = parseInt(matchIA[1], 10);
-    const minutos = matchIA[2] ? parseInt(matchIA[2], 10) : 0;
-
-    const agora = new Date();
-    const utcMs = agora.getTime() + agora.getTimezoneOffset() * 60000;
-    const offsetMs = (horas * 60 + Math.sign(horas) * minutos) * 60000;
-    const alvo = new Date(utcMs + offsetMs);
-
-    return `Horário aproximado em ${q} (${matchIA[0]}): ${alvo.toISOString().replace("T"," ").slice(0,19)} (aprox.).`;
-}
-
-// _where
-async function whereLugar(lugar) {
-    const q = lugar.trim();
-    if (!q) return "Informe um lugar após o comando _where.";
-
-    const prompt = `
-Para o lugar "${q}", responda APENAS assim:
-Nome - País - LAT - LON
-`;
-    const resposta = await askGroqSimple(prompt);
-    if (!resposta) return `Não consegui obter dados para "${q}".`;
-
-    const partes = resposta.split(" - ").map(p => p.trim());
-    if (partes.length < 4) return `Não consegui interpretar: ${resposta}`;
-
-    return `Localização identificada: **${partes[0]} (${partes[1]})**\nLatitude: ${partes[2]}\nLongitude: ${partes[3]}`;
-}
-
-// _search
-async function pesquisarTermo(termo) {
-    termo = termo.trim();
-    if (!termo) return "Informe um termo após _search.";
-
-    const ddgRes = await fetch(
-        "https://api.duckduckgo.com/?format=json&no_redirect=1&no_html=1&q=" +
-        encodeURIComponent(termo)
-    );
-    const ddg = await ddgRes.json();
-
-    let resposta = "";
-    resposta += ddg.AbstractText
-        ? `**DuckDuckGo:** ${ddg.AbstractText}\n`
-        : `**DuckDuckGo:** Nenhum resumo encontrado.\n`;
-
-    const wikiRes = await fetch(
-        "https://en.wikipedia.org/api/rest_v1/page/summary/" +
-        encodeURIComponent(termo)
-    );
-
-    if (wikiRes.ok) {
-        const wiki = await wikiRes.json();
-        resposta += wiki.extract
-            ? `\n**Wikipedia:** ${wiki.extract}`
-            : `\n**Wikipedia:** Nenhum resumo disponível.`;
-    }
-
-    return resposta;
-}
-
 // Comandos
 const publicCommands = {
     "_id": "Mostra o seu ID.",
     "_time": "Mostra a hora via UTC ou cidade.",
     "_where": "Mostra localização aproximada.",
     "_search": "Pesquisa no DuckDuckGo + Wikipedia.",
+    "_weather": "Mostra o estado do tempo numa cidade.",
+    "_info": "Mostra informações do usuário e do sistema.",
+    "_ping": "Mostra a latência do bot.",
+    "_uptime": "Mostra há quanto tempo o bot está online.",
+    "_version": "Mostra a versão do CrespoA.I.C.S.",
+    "_system": "Mostra estado técnico do sistema.",
     "_emojis enabled": "Ativa emojis.",
     "_emojis disabled": "Desativa emojis.",
     "_commands": "Lista comandos públicos."
@@ -294,8 +233,10 @@ client.once(Events.ClientReady, () => {
         status: "online"
     });
 });
+// =========================
+//   HANDLER DE MENSAGENS
+// =========================
 
-// Mensagens
 client.on(Events.MessageCreate, async (msg) => {
     if (msg.author.bot) return;
 
@@ -312,22 +253,19 @@ client.on(Events.MessageCreate, async (msg) => {
 
     const content = msg.content.trim();
 
-    // Comandos públicos
+    // =========================
+    //   COMANDOS PÚBLICOS
+    // =========================
+
     if (content === "_commands") {
         let texto = "";
         for (const cmd in publicCommands) texto += `**${cmd}** → ${publicCommands[cmd]}\n`;
         return msg.reply({ embeds: [embedCrespoIS("Comandos Públicos", texto)] });
     }
 
-    // Admin
-    if (content === "_adm-cmd") {
-        if (user !== OWNER_ID) return msg.reply("Apenas o Crespo pode ver estes comandos.");
-        let texto = "";
-        for (const cmd in adminCommands) texto += `**${cmd}** → ${adminCommands[cmd]}\n`;
-        return msg.reply({ embeds: [embedCrespoIS("Comandos Administrativos", texto)] });
+    if (content === "_id") {
+        return msg.reply("O seu ID é: **" + user + "**");
     }
-
-    if (content === "_id") return msg.reply("O seu ID é: " + user);
 
     if (content === "_emojis enabled") {
         emojisEnabled = true;
@@ -339,9 +277,20 @@ client.on(Events.MessageCreate, async (msg) => {
         return msg.reply("Emojis desativados.");
     }
 
+    // =========================
+    //   COMANDOS ADMIN
+    // =========================
+
+    if (content === "_adm-cmd") {
+        if (user !== OWNER_ID) return msg.reply("Apenas o Crespo pode ver estes comandos.");
+        let texto = "";
+        for (const cmd in adminCommands) texto += `**${cmd}** → ${adminCommands[cmd]}\n`;
+        return msg.reply({ embeds: [embedCrespoIS("Comandos Administrativos", texto)] });
+    }
+
     if (content === "_shutdown") {
         if (user !== OWNER_ID) return msg.reply("Apenas o Crespo pode reiniciar.");
-        await msg.reply("Reiniciando...");
+        await msg.reply("Reiniciando núcleo...");
         process.exit(1);
     }
 
@@ -351,7 +300,10 @@ client.on(Events.MessageCreate, async (msg) => {
         return msg.reply("Memória deste usuário neste canal foi resetada.");
     }
 
-    // _time
+    // =========================
+    //   _time
+    // =========================
+
     if (content.startsWith("_time ")) {
         const query = content.slice(6).trim();
         const thinking = await msg.reply("Calculando horário...");
@@ -359,7 +311,10 @@ client.on(Events.MessageCreate, async (msg) => {
         return thinking.edit(respostaTempo);
     }
 
-    // _where
+    // =========================
+    //   _where
+    // =========================
+
     if (content.startsWith("_where ")) {
         const lugar = content.slice(7).trim();
         const thinking = await msg.reply("Localizando...");
@@ -367,15 +322,149 @@ client.on(Events.MessageCreate, async (msg) => {
         return thinking.edit(resposta);
     }
 
-    // _search
+    // =========================
+    //   _search (embed PRO)
+    // =========================
+
     if (content.startsWith("_search ")) {
         const termo = content.slice(8).trim();
-        const thinking = await msg.reply("Pesquisando...");
-        const resposta = await pesquisarTermo(termo);
-        return thinking.edit(resposta);
+        if (!termo) return msg.reply("Use `_search <termo>`.");
+
+        const thinking = await msg.reply("Consultando bases de dados orbitais...");
+
+        const ddgRes = await fetch(
+            "https://api.duckduckgo.com/?format=json&no_redirect=1&no_html=1&q=" +
+            encodeURIComponent(termo)
+        );
+        const ddg = await ddgRes.json();
+
+        const wikiRes = await fetch(
+            "https://en.wikipedia.org/api/rest_v1/page/summary/" +
+            encodeURIComponent(termo)
+        );
+
+        let ddgResumo = ddg.AbstractText || "Nenhum resumo encontrado.";
+        let wikiResumo = "Nenhum resumo disponível.";
+
+        if (wikiRes.ok) {
+            const wiki = await wikiRes.json();
+            if (wiki.extract) wikiResumo = wiki.extract;
+        }
+
+        const embed = new EmbedBuilder()
+            .setTitle("📡 CrespoA.I.C.S. — Pesquisa")
+            .setColor("#4A90E2")
+            .setDescription(`Resultados para **${termo}**`)
+            .addFields(
+                { name: "DuckDuckGo", value: ddgResumo.slice(0, 1024) },
+                { name: "Wikipedia", value: wikiResumo.slice(0, 1024) }
+            )
+            .setFooter({ text: "CrespoIS • Núcleo Técnico" })
+            .setTimestamp();
+
+        return thinking.edit({ content: " ", embeds: [embed] });
     }
 
-    // IA: menção ou reply ao bot
+    // =========================
+    //   _weather (texto simples)
+    // =========================
+
+    if (content.startsWith("_weather ")) {
+        const cidade = content.slice(9).trim();
+        if (!cidade) return msg.reply("Use `_weather <cidade>`.");
+
+        const thinking = await msg.reply("Ajustando sensores meteorológicos...");
+
+        try {
+            const res = await fetch("https://wttr.in/" + encodeURIComponent(cidade) + "?format=3");
+            const txt = await res.text();
+            return thinking.edit(`Clima em **${cidade}**:\n${txt}`);
+        } catch (e) {
+            console.error("Erro _weather:", e);
+            return thinking.edit("Não consegui obter o clima agora.");
+        }
+    }
+
+    // =========================
+    //   _info
+    // =========================
+
+    if (content === "_info") {
+        const userInfo =
+            `__Usuário:__ **${msg.author.tag}**\n` +
+            `ID: \`${msg.author.id}\`\n` +
+            `Bot: **${msg.author.bot ? "sim" : "não"}**\n` +
+            `Criado em: ${msg.author.createdAt.toISOString().slice(0, 10)}`;
+
+        const uptime = formatUptime(Date.now() - startTime);
+        const sysInfo =
+            `__Sistema CrespoA.I.C.S.__\n` +
+            `Versão: **1.0.0-PRO**\n` +
+            `Uptime: **${uptime}**\n` +
+            `Plataforma: \`${os.platform()}\`\n` +
+            `CPU: \`${os.cpus()[0].model}\``;
+
+        return msg.reply(`${userInfo}\n\n${sysInfo}`);
+    }
+
+    // =========================
+    //   _ping
+    // =========================
+
+    if (content === "_ping") {
+        const before = Date.now();
+        const pongMsg = await msg.reply("Medindo latência...");
+        const latency = Date.now() - before;
+        const apiLatency = Math.round(client.ws.ping || 0);
+        return pongMsg.edit(`__Ping:__ **${latency}ms**\n__API:__ **${apiLatency}ms**`);
+    }
+
+    // =========================
+    //   _uptime
+    // =========================
+
+    if (content === "_uptime") {
+        const uptime = formatUptime(Date.now() - startTime);
+        return msg.reply(`__Uptime do núcleo CrespoA.I.C.S.:__ **${uptime}**`);
+    }
+
+    // =========================
+    //   _version
+    // =========================
+
+    if (content === "_version") {
+        return msg.reply(
+            `__CrespoA.I.C.S.__\n` +
+            `Versão do núcleo: **1.0.0-PRO**\n` +
+            `Modelo IA: **llama-3.3-70b-versatile**`
+        );
+    }
+
+    // =========================
+    //   _system
+    // =========================
+
+    if (content === "_system") {
+        const mem = process.memoryUsage();
+        const rssMB = (mem.rss / 1024 / 1024).toFixed(1);
+        const heapMB = (mem.heapUsed / 1024 / 1024).toFixed(1);
+        const uptime = formatUptime(Date.now() - startTime);
+
+        const txt =
+            `__Estado do sistema CrespoA.I.C.S.__\n` +
+            `Uptime: **${uptime}**\n` +
+            `Memória RSS: **${rssMB} MB**\n` +
+            `Heap usado: **${heapMB} MB**\n` +
+            `Plataforma: \`${os.platform()}\`\n` +
+            `CPUs: **${os.cpus().length}**`;
+
+        return msg.reply(txt);
+    }
+
+    // =========================
+    //   IA (texto simples)
+    // =========================
+
     const isMention =
         msg.mentions.has(client.user) ||
         content.startsWith(`<@${client.user.id}>`) ||
@@ -412,5 +501,9 @@ client.on(Events.MessageCreate, async (msg) => {
     const finalText = `${formatThinkingTime(elapsed)}\n${respostaIA}`;
     return thinkingMsg.edit(finalText);
 });
+
+// =========================
+//   LOGIN
+// =========================
 
 client.login(process.env.TOKEN);
