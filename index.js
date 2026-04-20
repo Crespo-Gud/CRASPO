@@ -28,18 +28,6 @@ const GROQ_KEY = process.env.GROQ_KEY;
 const GOOGLE_KEY = process.env.GOOGLE_KEY;
 const OPENWEATHER_KEY = process.env.OPENWEATHER_KEY;
 
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.DirectMessages
-    ],
-    partials: [Partials.Channel]
-});
-
-const startTime = Date.now();
-
 // =========================
 //   IA (Groq) — função simples
 // =========================
