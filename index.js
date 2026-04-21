@@ -150,7 +150,7 @@ OBJETIVO:
 - Responder de forma natural, fluida, inteligente e contextual.
 - A IA deve criar tudo — metáforas, estilo, correções, fluidez.
 `
-            },
+},
             { role: "user", content: prompt }
         ]
     };
@@ -173,193 +173,16 @@ OBJETIVO:
     }
 }
 
-client.on(Events.MessageCreate, async (msg) => {
-    if (msg.author.bot) return;
-    const content = msg.content;
-    
-// _info
-if (content.startsWith("_info")) {
-    const args = content.split(" ").slice(1);
 
-    // Determinar alvo
-    let alvo =
-        msg.mentions.users.first() ||
-        (args[0] ? await client.users.fetch(args[0]).catch(() => null) : null) ||
-        msg.author;
-
-    const membro = msg.guild ? await msg.guild.members.fetch(alvo.id).catch(() => null) : null;
-
-    // Datas formatadas
-    const criadoEm = new Date(alvo.createdAt).toLocaleDateString("pt-PT");
-    const entrouEm = membro ? new Date(membro.joinedAt).toLocaleDateString("pt-PT") : "N/A";
-
-    // Tempo no servidor
-    let tempoServidor = "N/A";
-    if (membro) {
-        const diff = Date.now() - membro.joinedAt;
-        const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
-        tempoServidor = `${dias} dias`;
-    }
-
-    // Roles
-    let roles = "N/A";
-    if (membro) {
-        const lista = membro.roles.cache
-            .filter(r => r.id !== msg.guild.id)
-            .map(r => r.toString());
-        roles = lista.length > 0 ? lista.join(", ") : "Nenhum cargo";
-    }
-
-    // Embed
-    const embed = {
-        color: 0x1b2a41, // azul escuro técnico
-        title: "🛰️ Rastreamento de Utilizador — CrespoIS Tracking Node",
-        thumbnail: { url: alvo.displayAvatarURL({ dynamic: true }) },
-        fields: [
-            { name: "Nome", value: `**${alvo.username}**`, inline: true },
-            { name: "Tag", value: `*${alvo.tag}*`, inline: true },
-            { name: "ID", value: `\`${alvo.id}\``, inline: false },
-            { name: "Conta criada em", value: criadoEm, inline: true },
-            { name: "Entrou no servidor em", value: entrouEm, inline: true },
-            { name: "Tempo no servidor", value: tempoServidor, inline: false },
-            { name: "Cargos", value: roles, inline: false }
-        ],
-        footer: {
-            text: "CrespoIS Orbital Node — Timestamp",
-        },
-        timestamp: new Date()
-    };
-
-    return msg.reply({ embeds: [embed] });
-}
-
-// _time
-async function obterHoraLugar(lugarOuUtc) {
-    const q = lugarOuUtc.trim();
-
-    const utcMatch = q.toUpperCase().match(/^UTC\s*([+-]\d{1,2})(?::?(\d{2}))?$/);
-
-    if (utcMatch) {
-        const horas = parseInt(utcMatch[1], 10);
-        const minutos = utcMatch[2] ? parseInt(utcMatch[2], 10) : 0;
-
-        const agora = new Date();
-        const utcMs = agora.getTime() + agora.getTimezoneOffset() * 60000;
-        const offsetMs = (horas * 60 + Math.sign(horas) * minutos) * 60000;
-        const alvo = new Date(utcMs + offsetMs);
-
-        return `Horário aproximado em ${q.toUpperCase()}: ${alvo.toISOString().replace("T"," ").slice(0,19)} (aprox.).`;
-    }
-
-    const pergunta = `Informe apenas o offset UTC atual da localidade "${q}" no formato UTC+H, UTC-H ou UTC+H:MM.`;
-    const resposta = await askGroqSimple(pergunta);
-
-    if (!resposta) return `Não consegui determinar o UTC de "${q}".`;
-
-    const matchIA = resposta.toUpperCase().match(/UTC\s*([+-]\d{1,2})(?::?(\d{2}))?/);
-    if (!matchIA) return `Não consegui interpretar o UTC de "${q}".`;
-
-    const horas = parseInt(matchIA[1], 10);
-    const minutos = matchIA[2] ? parseInt(matchIA[2], 10) : 0;
-
-    const agora = new Date();
-    const utcMs = agora.getTime() + agora.getTimezoneOffset() * 60000;
-    const offsetMs = (horas * 60 + Math.sign(horas) * minutos) * 60000;
-    const alvo = new Date(utcMs + offsetMs);
-
-    return `Horário aproximado em ${q} (${matchIA[0]}): ${alvo.toISOString().replace("T"," ").slice(0,19)} (aprox.).`;
-}
-
-// _where
-async function whereLugar(lugar) {
-    const q = lugar.trim();
-    if (!q) return "Informe um lugar após o comando _where.";
-
-    const prompt = `
-Para o lugar "${q}", responda APENAS assim:
-Nome - País - LAT - LON
-`;
-
-    const resposta = await askGroqSimple(prompt);
-    if (!resposta) return `Não consegui obter dados para "${q}".`;
-
-    const partes = resposta.split(" - ").map(p => p.trim());
-    if (partes.length < 4) return `Não consegui interpretar: ${resposta}`;
-
-    return `Localização identificada: **${partes[0]} (${partes[1]})**
-Latitude: ${partes[2]}
-Longitude: ${partes[3]}`;
-}
-
-
-// _search
-async function pesquisarTermo(termo) {
-    termo = termo.trim();
-    if (!termo) return "Informe um termo após _search.";
-
-    const ddgRes = await fetch(
-        "https://api.duckduckgo.com/?format=json&no_redirect=1&no_html=1&q=" +
-        encodeURIComponent(termo)
-    );
-    const ddg = await ddgRes.json();
-
-    let resposta = "";
-
-    resposta += ddg.AbstractText
-        ? `**DuckDuckGo:** ${ddg.AbstractText}\n`
-        : `**DuckDuckGo:** Nenhum resumo encontrado.\n`;
-
-    const wikiRes = await fetch(
-        "https://en.wikipedia.org/api/rest_v1/page/summary/" +
-        encodeURIComponent(termo)
-    );
-
-    if (wikiRes.ok) {
-        const wiki = await wikiRes.json();
-        resposta += wiki.extract
-            ? `\n**Wikipedia:** ${wiki.extract}`
-            : `\n**Wikipedia:** Nenhum resumo disponível.`;
-    }
-
-    return resposta;
-}
-
-
-// Comandos
-const publicCommands = {
-    "_id": "Mostra o seu ID.",
-    "_time": "Mostra a hora via UTC ou cidade.",
-    "_where": "Mostra localização aproximada.",
-    "_search": "Pesquisa no DuckDuckGo + Wikipedia.",
-    "_emojis enabled": "Ativa emojis.",
-    "_emojis disabled": "Desativa emojis.",
-    "_commands": "Lista comandos públicos."
-};
-
-const adminCommands = {
-    "_reset": "Limpa memória deste usuário neste canal.",
-    "_shutdown": "Reinicia o bot.",
-    "_adm-cmd": "Lista comandos administrativos."
-};
-
-
-// Ready
-client.once(Events.ClientReady, () => {
-    console.log(`CraspoBot∛ ligado como ${client.user.tag}`);
-
-    client.user.setPresence({
-        activities: [{ name: "_commands | vértice CrespoIS", type: 0 }],
-        status: "online"
-    });
-});
-
-
-// Mensagens
+// ------------------------------------------------------
+//  HANDLER ÚNICO — TUDO AQUI DENTRO
+// ------------------------------------------------------
 client.on(Events.MessageCreate, async (msg) => {
     if (msg.author.bot) return;
 
     const canal = msg.channel.id;
     const user = msg.author.id;
+    const content = msg.content.trim();
 
     if (!memory[canal]) memory[canal] = {};
     if (!memory[canal][user]) memory[canal][user] = [];
@@ -367,117 +190,179 @@ client.on(Events.MessageCreate, async (msg) => {
     memory[canal][user].push(msg.content);
     if (memory[canal][user].length > 8) memory[canal][user].shift();
 
-    const content = msg.content.trim();
 
-// Comandos públicos
-if (content === "_commands") {
-    let texto = "📜 Comandos disponíveis:\n\n";
-    for (const cmd in publicCommands) {
-        texto += `${cmd} → ${publicCommands[cmd]}\n`;
+    // ------------------------------------------------------
+    //  _info
+    // ------------------------------------------------------
+    if (content.startsWith("_info")) {
+        const args = content.split(" ").slice(1);
+
+        let alvo =
+            msg.mentions.users.first() ||
+            (args[0] ? await client.users.fetch(args[0]).catch(() => null) : null) ||
+            msg.author;
+
+        const membro = msg.guild ? await msg.guild.members.fetch(alvo.id).catch(() => null) : null;
+
+        const criadoEm = new Date(alvo.createdAt).toLocaleDateString("pt-PT");
+        const entrouEm = membro ? new Date(membro.joinedAt).toLocaleDateString("pt-PT") : "N/A";
+
+        let tempoServidor = "N/A";
+        if (membro) {
+            const diff = Date.now() - membro.joinedAt;
+            const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
+            tempoServidor = `${dias} dias`;
+        }
+
+        let roles = "N/A";
+        if (membro) {
+            const lista = membro.roles.cache
+                .filter(r => r.id !== msg.guild.id)
+                .map(r => r.toString());
+            roles = lista.length > 0 ? lista.join(", ") : "Nenhum cargo";
+        }
+
+        const embed = {
+            color: 0x1b2a41,
+            title: "🛰️ Rastreamento de Utilizador — CrespoIS Tracking Node",
+            thumbnail: { url: alvo.displayAvatarURL({ dynamic: true }) },
+            fields: [
+                { name: "Nome", value: `**${alvo.username}**`, inline: true },
+                { name: "Tag", value: `*${alvo.tag}*`, inline: true },
+                { name: "ID", value: `\`${alvo.id}\``, inline: false },
+                { name: "Conta criada em", value: criadoEm, inline: true },
+                { name: "Entrou no servidor em", value: entrouEm, inline: true },
+                { name: "Tempo no servidor", value: tempoServidor, inline: false },
+                { name: "Cargos", value: roles, inline: false }
+            ],
+            footer: { text: "CrespoIS Orbital Node — Timestamp" },
+            timestamp: new Date()
+        };
+
+        return msg.reply({ embeds: [embed] });
     }
-    return msg.reply(texto);
-}
 
-// Admin
-if (content === "_adm-cmd") {
-    if (user !== OWNER_ID) return msg.reply("Apenas o Crespo pode ver estes comandos.");
 
-    let texto = "🛠 Comandos administrativos:\n\n";
-    for (const cmd in adminCommands) {
-        texto += `${cmd} → ${adminCommands[cmd]}\n`;
+    // ------------------------------------------------------
+    //  COMANDOS PÚBLICOS
+    // ------------------------------------------------------
+    if (content === "_commands") {
+        let texto = "📜 Comandos disponíveis:\n\n";
+        for (const cmd in publicCommands) texto += `${cmd} → ${publicCommands[cmd]}\n`;
+        return msg.reply(texto);
     }
-    return msg.reply(texto);
-}
 
-if (content === "_id") return msg.reply("O seu ID é: " + user);
+    if (content === "_id") return msg.reply("O seu ID é: " + user);
 
-if (content === "_emojis enabled") {
-    emojisEnabled = true;
-    return msg.reply("Emojis ativados.");
-}
+    if (content === "_emojis enabled") {
+        emojisEnabled = true;
+        return msg.reply("Emojis ativados.");
+    }
 
-if (content === "_emojis disabled") {
-    emojisEnabled = false;
-    return msg.reply("Emojis desativados.");
-}
-
-if (content === "_shutdown") {
-    if (user !== OWNER_ID) return msg.reply("Apenas o Crespo pode reiniciar.");
-    await msg.reply("Reiniciando...");
-    process.exit(1);
-}
-
-if (content === "_reset") {
-    if (user !== OWNER_ID) return msg.reply("Apenas o Crespo pode resetar memória.");
-    memory[canal][user] = [];
-    return msg.reply("Memória deste usuário neste canal foi resetada.");
-}
+    if (content === "_emojis disabled") {
+        emojisEnabled = false;
+        return msg.reply("Emojis desativados.");
+    }
 
 
-// _time
-if (content.startsWith("_time ")) {
-    const query = content.slice(6).trim();
-    const thinking = await msg.reply("Calculando horário...");
-    const respostaTempo = await obterHoraLugar(query);
-    return thinking.edit(respostaTempo);
-}
+    // ------------------------------------------------------
+    //  ADMIN
+    // ------------------------------------------------------
+    if (content === "_adm-cmd") {
+        if (user !== OWNER_ID) return msg.reply("Apenas o Crespo pode ver estes comandos.");
+
+        let texto = "🛠 Comandos administrativos:\n\n";
+        for (const cmd in adminCommands) texto += `${cmd} → ${adminCommands[cmd]}\n`;
+        return msg.reply(texto);
+    }
+
+    if (content === "_shutdown") {
+        if (user !== OWNER_ID) return msg.reply("Apenas o Crespo pode reiniciar.");
+        await msg.reply("Reiniciando...");
+        process.exit(1);
+    }
+
+    if (content === "_reset") {
+        if (user !== OWNER_ID) return msg.reply("Apenas o Crespo pode resetar memória.");
+        memory[canal][user] = [];
+        return msg.reply("Memória deste usuário neste canal foi resetada.");
+    }
 
 
-// _where
-if (content.startsWith("_where ")) {
-    const lugar = content.slice(7).trim();
-    const thinking = await msg.reply("Localizando...");
-    const resposta = await whereLugar(lugar);
-    return thinking.edit(resposta);
-}
+    // ------------------------------------------------------
+    //  _time
+    // ------------------------------------------------------
+    if (content.startsWith("_time ")) {
+        const query = content.slice(6).trim();
+        const thinking = await msg.reply("Calculando horário...");
+        const respostaTempo = await obterHoraLugar(query);
+        return thinking.edit(respostaTempo);
+    }
 
 
-// _search
-if (content.startsWith("_search ")) {
-    const termo = content.slice(8).trim();
-    const thinking = await msg.reply("Pesquisando...");
-    const resposta = await pesquisarTermo(termo);
-    return thinking.edit(resposta);
-}
+    // ------------------------------------------------------
+    //  _where
+    // ------------------------------------------------------
+    if (content.startsWith("_where ")) {
+        const lugar = content.slice(7).trim();
+        const thinking = await msg.reply("Localizando...");
+        const resposta = await whereLugar(lugar);
+        return thinking.edit(resposta);
+    }
 
 
-// IA: menção ou reply ao bot
-const isMention =
-    msg.mentions.has(client.user) ||
-    content.startsWith(`<@${client.user.id}>`) ||
-    content.startsWith(`<@!${client.user.id}>`);
+    // ------------------------------------------------------
+    //  _search
+    // ------------------------------------------------------
+    if (content.startsWith("_search ")) {
+        const termo = content.slice(8).trim();
+        const thinking = await msg.reply("Pesquisando...");
+        const resposta = await pesquisarTermo(termo);
+        return thinking.edit(resposta);
+    }
 
-let isReplyToBot = false;
 
-if (msg.reference?.messageId) {
-    try {
-        const refMsg = await msg.channel.messages.fetch(msg.reference.messageId);
-        if (refMsg.author.id === client.user.id) isReplyToBot = true;
-    } catch {}
-}
+    // ------------------------------------------------------
+    //  IA AUTOMÁTICA
+    // ------------------------------------------------------
+    const isMention =
+        msg.mentions.has(client.user) ||
+        content.startsWith(`<@${client.user.id}>`) ||
+        content.startsWith(`<@!${client.user.id}>`);
 
-if (!isMention && !isReplyToBot) return;
+    let isReplyToBot = false;
 
-let textoUser = content
-    .replace(`<@${client.user.id}>`, "")
-    .replace(`<@!${client.user.id}>`, "")
-    .trim();
+    if (msg.reference?.messageId) {
+        try {
+            const refMsg = await msg.channel.messages.fetch(msg.reference.messageId);
+            if (refMsg.author.id === client.user.id) isReplyToBot = true;
+        } catch {}
+    }
 
-if (!textoUser && !isReplyToBot) {
-    return msg.reply("Use um comando ou escreva algo após me mencionar.");
-}
+    if (!isMention && !isReplyToBot) return;
 
-if (!textoUser && isReplyToBot) return;
+    let textoUser = content
+        .replace(`<@${client.user.id}>`, "")
+        .replace(`<@!${client.user.id}>`, "")
+        .trim();
 
-const contexto = memory[canal][user].join("\n");
-const thinkingMsg = await msg.reply("Processando com precisão atômica...");
+    if (!textoUser && !isReplyToBot) {
+        return msg.reply("Use um comando ou escreva algo após me mencionar.");
+    }
 
-const start = Date.now();
-const respostaIA = await gerarIA(textoUser, contexto, msg.author.username);
-const elapsed = (Date.now() - start) / 1000;
+    if (!textoUser && isReplyToBot) return;
 
-const finalText = `${formatThinkingTime(elapsed)}\n${respostaIA}`;
-return thinkingMsg.edit(finalText);
+    const contexto = memory[canal][user].join("\n");
+    const thinkingMsg = await msg.reply("Processando com precisão atômica...");
+
+    const start = Date.now();
+    const respostaIA = await gerarIA(textoUser, contexto, msg.author.username);
+    const elapsed = (Date.now() - start) / 1000;
+
+    const finalText = `${formatThinkingTime(elapsed)}\n${respostaIA}`;
+    return thinkingMsg.edit(finalText);
 });
 
+
+// ------------------------------------------------------
 client.login(process.env.TOKEN);
