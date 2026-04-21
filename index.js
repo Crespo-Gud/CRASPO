@@ -18,7 +18,6 @@ let emojisEnabled = true;
 
 // Memória por usuário *por canal*
 let memory = {}; 
-// Estrutura: memory[channelId][userId] = [mensagens...]
 
 // Bot
 const client = new Client({
@@ -97,24 +96,17 @@ async function askGroqSimple(prompt) {
     }
 }
 
-// IA principal — agora com palavras‑tema e estilo livre
+// IA principal
 async function gerarIA(prompt, contexto, autorUsername) {
     const creatorName = randomCreatorName();
     const nomePrincipal = extrairNomePrincipal(autorUsername);
-
-    const palavrasTema = [
-        "átomo","eletrão","protão","neutrão","neuton",
-        "força gravitacional","força","satélite","espaço",
-        "cratera","sismo","molécula","fissão","nuclear",
-        "velocidade","acelerador de partículas","plasma","urânio"
-    ];
 
     const body = {
         model: "llama-3.3-70b-versatile",
         messages: [
             {
                 role: "system",
-content: `
+                content: `
 Você é o CraspoBot∛.
 
 IDENTIDADE:
@@ -132,25 +124,21 @@ ESTILO DE RESPOSTA:
 - Crie metáforas originais quando fizer sentido.
 - Corrija automaticamente erros de português.
 
-
 LINGUAGEM:
 - Responda sempre em português do Brasil.
 - Tom técnico, educado e claro.
-- Adapte a língua se o usuário pedir explicitamente outra.
 
 TRATAMENTO:
 - Use "você".
 - Quando usar o nome do usuário, use: "${nomePrincipal}".
 
 MEMÓRIA:
-- Aqui está o contexto recente deste usuário neste canal:
 ${contexto}
 
 OBJETIVO:
 - Responder de forma natural, fluida, inteligente e contextual.
-- A IA deve criar tudo — metáforas, estilo, correções, fluidez.
 `
-},
+            },
             { role: "user", content: prompt }
         ]
     };
@@ -172,11 +160,122 @@ OBJETIVO:
         return "Tive um colapso atômico interno ao tentar responder. Tente novamente.";
     }
 }
+// Funções dos comandos
+async function obterHoraLugar(lugarOuUtc) {
+    const q = lugarOuUtc.trim();
 
+    const utcMatch = q.toUpperCase().match(/^UTC\s*([+-]\d{1,2})(?::?(\d{2}))?$/);
 
-// ------------------------------------------------------
-//  HANDLER ÚNICO — TUDO AQUI DENTRO
-// ------------------------------------------------------
+    if (utcMatch) {
+        const horas = parseInt(utcMatch[1], 10);
+        const minutos = utcMatch[2] ? parseInt(utcMatch[2], 10) : 0;
+
+        const agora = new Date();
+        const utcMs = agora.getTime() + agora.getTimezoneOffset() * 60000;
+        const offsetMs = (horas * 60 + Math.sign(horas) * minutos) * 60000;
+        const alvo = new Date(utcMs + offsetMs);
+
+        return `Horário aproximado em ${q.toUpperCase()}: ${alvo.toISOString().replace("T"," ").slice(0,19)} (aprox.).`;
+    }
+
+    const pergunta = `Informe apenas o offset UTC atual da localidade "${q}" no formato UTC+H, UTC-H ou UTC+H:MM.`;
+    const resposta = await askGroqSimple(pergunta);
+
+    if (!resposta) return `Não consegui determinar o UTC de "${q}".`;
+
+    const matchIA = resposta.toUpperCase().match(/UTC\s*([+-]\d{1,2})(?::?(\d{2}))?/);
+    if (!matchIA) return `Não consegui interpretar o UTC de "${q}".`;
+
+    const horas = parseInt(matchIA[1], 10);
+    const minutos = matchIA[2] ? parseInt(matchIA[2], 10) : 0;
+
+    const agora = new Date();
+    const utcMs = agora.getTime() + agora.getTimezoneOffset() * 60000;
+    const offsetMs = (horas * 60 + Math.sign(horas) * minutos) * 60000;
+    const alvo = new Date(utcMs + offsetMs);
+
+    return `Horário aproximado em ${q} (${matchIA[0]}): ${alvo.toISOString().replace("T"," ").slice(0,19)} (aprox.).`;
+}
+
+async function whereLugar(lugar) {
+    const q = lugar.trim();
+    if (!q) return "Informe um lugar após o comando _where.";
+
+    const prompt = `
+Para o lugar "${q}", responda APENAS assim:
+Nome - País - LAT - LON
+`;
+
+    const resposta = await askGroqSimple(prompt);
+    if (!resposta) return `Não consegui obter dados para "${q}".`;
+
+    const partes = resposta.split(" - ").map(p => p.trim());
+    if (partes.length < 4) return `Não consegui interpretar: ${resposta}`;
+
+    return `Localização identificada: **${partes[0]} (${partes[1]})**
+Latitude: ${partes[2]}
+Longitude: ${partes[3]}`;
+}
+
+async function pesquisarTermo(termo) {
+    termo = termo.trim();
+    if (!termo) return "Informe um termo após _search.";
+
+    const ddgRes = await fetch(
+        "https://api.duckduckgo.com/?format=json&no_redirect=1&no_html=1&q=" +
+        encodeURIComponent(termo)
+    );
+    const ddg = await ddgRes.json();
+
+    let resposta = "";
+
+    resposta += ddg.AbstractText
+        ? `**DuckDuckGo:** ${ddg.AbstractText}\n`
+        : `**DuckDuckGo:** Nenhum resumo encontrado.\n`;
+
+    const wikiRes = await fetch(
+        "https://en.wikipedia.org/api/rest_v1/page/summary/" +
+        encodeURIComponent(termo)
+    );
+
+    if (wikiRes.ok) {
+        const wiki = await wikiRes.json();
+        resposta += wiki.extract
+            ? `\n**Wikipedia:** ${wiki.extract}`
+            : `\n**Wikipedia:** Nenhum resumo disponível.`;
+    }
+
+    return resposta;
+}
+
+// Listas de comandos
+const publicCommands = {
+    "_id": "Mostra o seu ID.",
+    "_info": "Mostra informações do utilizador.",
+    "_time": "Mostra a hora via UTC ou cidade.",
+    "_where": "Mostra localização aproximada.",
+    "_search": "Pesquisa no DuckDuckGo + Wikipedia.",
+    "_emojis enabled": "Ativa emojis.",
+    "_emojis disabled": "Desativa emojis.",
+    "_commands": "Lista comandos públicos."
+};
+
+const adminCommands = {
+    "_reset": "Limpa memória deste usuário neste canal.",
+    "_shutdown": "Reinicia o bot.",
+    "_adm-cmd": "Lista comandos administrativos."
+};
+
+// Ready
+client.once(Events.ClientReady, () => {
+    console.log(`CraspoBot∛ ligado como ${client.user.tag}`);
+
+    client.user.setPresence({
+        activities: [{ name: "_commands | vértice CrespoIS", type: 0 }],
+        status: "online"
+    });
+});
+// Handler único
 client.on(Events.MessageCreate, async (msg) => {
     if (msg.author.bot) return;
 
@@ -190,9 +289,8 @@ client.on(Events.MessageCreate, async (msg) => {
     memory[canal][user].push(msg.content);
     if (memory[canal][user].length > 8) memory[canal][user].shift();
 
-
     // ------------------------------------------------------
-    //  _info
+    // _info (embed)
     // ------------------------------------------------------
     if (content.startsWith("_info")) {
         const args = content.split(" ").slice(1);
@@ -242,55 +340,129 @@ client.on(Events.MessageCreate, async (msg) => {
         return msg.reply({ embeds: [embed] });
     }
 
-
     // ------------------------------------------------------
-    //  COMANDOS PÚBLICOS
+    // _commands (embed)
     // ------------------------------------------------------
     if (content === "_commands") {
-        let texto = "📜 Comandos disponíveis:\n\n";
-        for (const cmd in publicCommands) texto += `${cmd} → ${publicCommands[cmd]}\n`;
-        return msg.reply(texto);
+        const lista = Object.entries(publicCommands)
+            .map(([cmd, desc]) => `**${cmd}** — ${desc}`)
+            .join("\n");
+
+        const embed = {
+            color: 0x1b2a41,
+            title: "📘 Lista de Comandos — CrespoIS Command Node",
+            description: lista,
+            footer: { text: "CrespoIS — Sistema de Comandos" },
+            timestamp: new Date()
+        };
+
+        return msg.reply({ embeds: [embed] });
     }
-
-    if (content === "_id") return msg.reply("O seu ID é: " + user);
-
-    if (content === "_emojis enabled") {
-        emojisEnabled = true;
-        return msg.reply("Emojis ativados.");
-    }
-
-    if (content === "_emojis disabled") {
-        emojisEnabled = false;
-        return msg.reply("Emojis desativados.");
-    }
-
 
     // ------------------------------------------------------
-    //  ADMIN
+    // _adm-cmd (embed)
     // ------------------------------------------------------
     if (content === "_adm-cmd") {
         if (user !== OWNER_ID) return msg.reply("Apenas o Crespo pode ver estes comandos.");
 
-        let texto = "🛠 Comandos administrativos:\n\n";
-        for (const cmd in adminCommands) texto += `${cmd} → ${adminCommands[cmd]}\n`;
-        return msg.reply(texto);
+        const lista = Object.entries(adminCommands)
+            .map(([cmd, desc]) => `**${cmd}** — ${desc}`)
+            .join("\n");
+
+        const embed = {
+            color: 0x8b0000,
+            title: "🛠️ Comandos Administrativos — CrespoIS Admin Node",
+            description: lista,
+            footer: { text: "Acesso restrito — CrespoIS" },
+            timestamp: new Date()
+        };
+
+        return msg.reply({ embeds: [embed] });
     }
 
+    // ------------------------------------------------------
+    // _id (embed)
+    // ------------------------------------------------------
+    if (content === "_id") {
+        const embed = {
+            color: 0x1b2a41,
+            title: "🛰️ Identificação do Utilizador",
+            fields: [
+                { name: "ID", value: `\`${user}\`` }
+            ],
+            footer: { text: "CrespoIS Identity Node" },
+            timestamp: new Date()
+        };
+
+        return msg.reply({ embeds: [embed] });
+    }
+
+    // ------------------------------------------------------
+    // _emojis enabled / disabled (embed)
+    // ------------------------------------------------------
+    if (content === "_emojis enabled") {
+        emojisEnabled = true;
+
+        const embed = {
+            color: 0x00cc66,
+            title: "✨ Emojis Ativados",
+            description: "Os emojis foram ativados com sucesso.",
+            timestamp: new Date()
+        };
+
+        return msg.reply({ embeds: [embed] });
+    }
+
+    if (content === "_emojis disabled") {
+        emojisEnabled = false;
+
+        const embed = {
+            color: 0xcc3300,
+            title: "🚫 Emojis Desativados",
+            description: "Os emojis foram desativados.",
+            timestamp: new Date()
+        };
+
+        return msg.reply({ embeds: [embed] });
+    }
+
+    // ------------------------------------------------------
+    // _shutdown (embed)
+    // ------------------------------------------------------
     if (content === "_shutdown") {
         if (user !== OWNER_ID) return msg.reply("Apenas o Crespo pode reiniciar.");
-        await msg.reply("Reiniciando...");
+
+        const embed = {
+            color: 0x990000,
+            title: "🛑 Reinicialização",
+            description: "O sistema CrespoIS está a reiniciar...",
+            timestamp: new Date()
+        };
+
+        await msg.reply({ embeds: [embed] });
         process.exit(1);
     }
 
+    // ------------------------------------------------------
+    // _reset (embed)
+    // ------------------------------------------------------
     if (content === "_reset") {
         if (user !== OWNER_ID) return msg.reply("Apenas o Crespo pode resetar memória.");
+
         memory[canal][user] = [];
-        return msg.reply("Memória deste usuário neste canal foi resetada.");
+
+        const embed = {
+            color: 0xffcc00,
+            title: "♻️ Memória Resetada",
+            description: "A memória deste usuário neste canal foi limpa.",
+            timestamp: new Date()
+        };
+
+        return msg.reply({ embeds: [embed] });
     }
 
-
     // ------------------------------------------------------
-    //  _time
+    // _time
     // ------------------------------------------------------
     if (content.startsWith("_time ")) {
         const query = content.slice(6).trim();
@@ -299,9 +471,8 @@ client.on(Events.MessageCreate, async (msg) => {
         return thinking.edit(respostaTempo);
     }
 
-
     // ------------------------------------------------------
-    //  _where
+    // _where
     // ------------------------------------------------------
     if (content.startsWith("_where ")) {
         const lugar = content.slice(7).trim();
@@ -310,9 +481,8 @@ client.on(Events.MessageCreate, async (msg) => {
         return thinking.edit(resposta);
     }
 
-
     // ------------------------------------------------------
-    //  _search
+    // _search
     // ------------------------------------------------------
     if (content.startsWith("_search ")) {
         const termo = content.slice(8).trim();
@@ -321,9 +491,8 @@ client.on(Events.MessageCreate, async (msg) => {
         return thinking.edit(resposta);
     }
 
-
     // ------------------------------------------------------
-    //  IA AUTOMÁTICA
+    // IA AUTOMÁTICA
     // ------------------------------------------------------
     const isMention =
         msg.mentions.has(client.user) ||
@@ -362,7 +531,6 @@ client.on(Events.MessageCreate, async (msg) => {
     const finalText = `${formatThinkingTime(elapsed)}\n${respostaIA}`;
     return thinkingMsg.edit(finalText);
 });
-
 
 // ------------------------------------------------------
 client.login(process.env.TOKEN);
