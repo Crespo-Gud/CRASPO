@@ -173,6 +173,61 @@ OBJETIVO:
     }
 }
 
+// _info
+if (content.startsWith("_info")) {
+    const args = content.split(" ").slice(1);
+
+    // Determinar alvo
+    let alvo =
+        msg.mentions.users.first() ||
+        (args[0] ? await client.users.fetch(args[0]).catch(() => null) : null) ||
+        msg.author;
+
+    const membro = msg.guild ? await msg.guild.members.fetch(alvo.id).catch(() => null) : null;
+
+    // Datas formatadas
+    const criadoEm = new Date(alvo.createdAt).toLocaleDateString("pt-PT");
+    const entrouEm = membro ? new Date(membro.joinedAt).toLocaleDateString("pt-PT") : "N/A";
+
+    // Tempo no servidor
+    let tempoServidor = "N/A";
+    if (membro) {
+        const diff = Date.now() - membro.joinedAt;
+        const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
+        tempoServidor = `${dias} dias`;
+    }
+
+    // Roles
+    let roles = "N/A";
+    if (membro) {
+        const lista = membro.roles.cache
+            .filter(r => r.id !== msg.guild.id)
+            .map(r => r.toString());
+        roles = lista.length > 0 ? lista.join(", ") : "Nenhum cargo";
+    }
+
+    // Embed
+    const embed = {
+        color: 0x1b2a41, // azul escuro técnico
+        title: "🛰️ Rastreamento de Utilizador — CrespoIS Tracking Node",
+        thumbnail: { url: alvo.displayAvatarURL({ dynamic: true }) },
+        fields: [
+            { name: "Nome", value: `**${alvo.username}**`, inline: true },
+            { name: "Tag", value: `*${alvo.tag}*`, inline: true },
+            { name: "ID", value: `\`${alvo.id}\``, inline: false },
+            { name: "Conta criada em", value: criadoEm, inline: true },
+            { name: "Entrou no servidor em", value: entrouEm, inline: true },
+            { name: "Tempo no servidor", value: tempoServidor, inline: false },
+            { name: "Cargos", value: roles, inline: false }
+        ],
+        footer: {
+            text: "CrespoIS Orbital Node — Timestamp",
+        },
+        timestamp: new Date()
+    };
+
+    return msg.reply({ embeds: [embed] });
+}
 
 // _time
 async function obterHoraLugar(lugarOuUtc) {
