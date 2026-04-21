@@ -173,6 +173,10 @@ OBJETIVO:
     }
 }
 
+client.on(Events.MessageCreate, async (msg) => {
+    if (msg.author.bot) return;
+    const content = msg.content;
+    
 // _info
 if (content.startsWith("_info")) {
     const args = content.split(" ").slice(1);
